@@ -1,0 +1,35 @@
+[package]
+name = "manta-indexer"
+version = "0.1.0"
+edition = "2021"
+homepage = 'https://manta.network'
+license = 'GPL-3.0'
+repository = 'https://github.com/Manta-Network/manta-indexer/'
+
+[dependencies]
+# error handler crates
+anyhow = "1.0.61"
+thiserror = "1.0.32"
+
+# substrate crates
+frame-support = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
+sp-core = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
+
+# log crates
+tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+
+# manta deps
+manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4", features = ["groth16", "scale"] }
+
+# general crates
+chrono = "0.4.22"
+codec = { version = "3.1.5", package = "parity-scale-codec" }
+hex = "0.4.3"
+jsonrpsee = { version = "0.15.1", features = ["full"] }
+rusqlite = { version = "0.28.0", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.20.1", features = ["rt", "macros", "sync"] }
+toml = "0.5"
+
+[dev-dependencies]

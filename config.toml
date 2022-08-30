@@ -1,0 +1,5 @@
+[configuration]
+frequence = 2                          # it means pull shards per 2 seconds
+port = 9932
+rpc-method = "mantaPay_pullLedgerDiff"
+db-path = ""
