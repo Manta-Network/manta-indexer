@@ -14,22 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use anyhow::Result;
+use thiserror::Error;
 
-mod constants;
-mod db;
-mod errors;
-mod logger;
-mod pull_service;
-mod relay;
-mod sync;
-mod types;
-mod utils;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // initialize logger
-    utils::init_logger();
-
-    Ok(())
+#[derive(Clone, Debug, Error)]
+pub enum IndexerError {
+    #[error("The resuest is timeout.")]
+    RequestTimeOut,
+    #[error("Seems full node doesn't work.")]
+    FullNodeIsDown,
+    #[error("Unknown error.")]
+    Unknown,
 }

@@ -13,3 +13,44 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
+
+use anyhow::Result;
+use rusqlite::Connection;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+pub async fn initialize_db(conn: Arc<Mutex<Connection>>) -> Result<()> {
+    let _conn = conn.lock().await;
+    _conn.execute("PRAGMA synchronous = OFF;", ())?;
+    // Enable WAL mode
+    _conn.execute("PRAGMA journal_mode = WAL;", ())?;
+
+    Ok(())
+}
+
+pub async fn create_table(conn: Arc<Mutex<Connection>>, table: &str) -> Result<()> {
+    conn.lock().await.execute(table, ())?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn create_table_should_work() {
+        let db_path = "/Users/jamie/my-repo/manta-indexer/sqlite-indexing.db";
+        let table = "
+            create table hacker (
+                first_name text not null,
+                last_name text not null,
+                email text not null
+            )
+        ";
+        let conn = crate::utils::open_db(db_path).await.unwrap();
+        initialize_db(conn.clone()).await;
+        create_table(conn, table).await;
+        assert!(true);
+    }
+}

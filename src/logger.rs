@@ -67,3 +67,53 @@ impl WsMiddleware for IndexerLogger {
         );
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct RelayerLogger;
+
+impl WsMiddleware for RelayerLogger {
+    type Instant = Instant;
+
+    fn on_connect(&self, remote_addr: SocketAddr, headers: &Headers) {
+        println!(
+            "[RelayerLogger::on_connect] remote_addr {}, headers: {:?}",
+            remote_addr, headers
+        );
+    }
+
+    fn on_request(&self) -> Self::Instant {
+        println!("[RelayerLogger::on_request]");
+        Instant::now()
+    }
+
+    fn on_call(&self, name: &str, params: Params, kind: MethodKind) {
+        println!(
+            "[RelayerLogger::on_call] method: '{}', params: {:?}, kind: {}",
+            name, params, kind
+        );
+    }
+
+    fn on_result(&self, name: &str, succeess: bool, started_at: Self::Instant) {
+        println!(
+            "[RelayerLogger::on_result] '{}', worked? {}, time elapsed {:?}",
+            name,
+            succeess,
+            started_at.elapsed()
+        );
+    }
+
+    fn on_response(&self, result: &str, started_at: Self::Instant) {
+        println!(
+            "[RelayerLogger::on_response] result: {}, time elapsed {:?}",
+            result,
+            started_at.elapsed()
+        );
+    }
+
+    fn on_disconnect(&self, remote_addr: SocketAddr) {
+        println!(
+            "[RelayerLogger::on_disconnect] remote_addr: {}",
+            remote_addr
+        );
+    }
+}

@@ -19,6 +19,7 @@ use anyhow::Result;
 use codec::Encode;
 use frame_support::{storage::storage_prefix, StorageHasher, Twox64Concat};
 use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use rusqlite::Connection;
 use sp_core::storage::StorageKey;
@@ -28,6 +29,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Mutex;
+use tokio::time::{sleep, Duration};
 use toml::Value;
 
 // read project config file
@@ -87,7 +89,7 @@ pub async fn is_full_node(ws: &WsClient) -> bool {
     let roles = ws
         .request::<Vec<String>>("system_nodeRoles", None)
         .await
-        .expect("We don't pull UTXOs from validators.");
+        .expect("Unknown roles.");
     roles.iter().any(|r| r == "Full")
 }
 
@@ -103,6 +105,45 @@ pub async fn is_the_rpc_methods_existed(ws: &WsClient, rpc_method: &str) -> Resu
     let methods = ws.request::<RpcMethods>("rpc_methods", None).await?;
 
     Ok(methods.methods.iter().any(|m| m == rpc_method))
+}
+
+pub fn build_tokio_runtime() -> Result<tokio::runtime::Runtime> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .on_thread_start(|| {
+            println!("manta indexer servier is started!");
+        })
+        .on_thread_stop(|| {
+            println!("manta indexer servier is stoped!");
+        })
+        .enable_all()
+        .build()?;
+
+    Ok(rt)
+}
+
+// Ensure full node is started first.
+pub async fn is_full_node_started(ws: &WsClient) -> Result<bool> {
+    let current_block = ws.request::<String>("chain_getBlockHash", None).await?;
+
+    // sleep 12-13 seconds to whether any new block is produced.
+    sleep(Duration::from_secs(13)).await;
+    let latest_block = ws.request::<String>("chain_getBlockHash", None).await?;
+
+    Ok(latest_block != current_block)
+}
+
+pub async fn get_latest_finalized_head(ws: &WsClient) -> Result<String> {
+    let finalized_head = ws.request::<String>("chain_getFinalisedHead", None).await?;
+
+    Ok(finalized_head)
+}
+
+pub async fn submit_extrinsic(ws: &WsClient, extrinsic: &str) -> Result<String> {
+    let finalized_head = ws
+        .request::<String>("author_submitExtrinsic", rpc_params![extrinsic])
+        .await?;
+
+    Ok(finalized_head)
 }
 
 #[cfg(test)]
@@ -137,10 +178,21 @@ mod tests {
     async fn pull_rpc_method_must_exist() {
         let config = read_config().unwrap();
         let rpc_method = config["configuration"]["rpc-method"].as_str().unwrap();
-        let url = "wss://falafel.calamari.systems:443"; // It's a full node
+        let url = "wss://ws.rococo.dolphin.engineering:443"; // It's a full node
         let ws = create_ws_client(url)
             .await
             .expect("failed to create ws client.");
         assert!(is_the_rpc_methods_existed(&ws, rpc_method).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn full_node_must_be_started_first() {
+        let url = "wss://ws.rococo.dolphin.engineering:443"; // It's a full node
+        let ws = create_ws_client(url)
+            .await
+            .expect("failed to create ws client.");
+        let is_started = is_full_node_started(&ws).await;
+        assert!(is_started.is_ok());
+        assert!(is_started.unwrap());
     }
 }
