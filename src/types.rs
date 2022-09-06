@@ -40,6 +40,26 @@ pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>;
 /// Sender Chunk Data Type
 pub type SenderChunk = Vec<VoidNumber>;
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RpcMethods {
+    version: u32,
+    methods: Vec<String>,
+}
+
+/// Health struct returned by the RPC
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Health {
+	/// Number of connected peers
+	pub peers: usize,
+	/// Is the node syncing
+	pub is_syncing: bool,
+	/// Should this node have any peers
+	///
+	/// Might be false for local chains or when running without discovery.
+	pub should_have_peers: bool,
+}
+
 #[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize)]
 pub struct EncryptedNote {
     /// Ephemeral Public Key

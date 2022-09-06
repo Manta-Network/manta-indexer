@@ -104,8 +104,8 @@ impl WsMiddleware for RelayerLogger {
 
     fn on_response(&self, result: &str, started_at: Self::Instant) {
         println!(
-            "[RelayerLogger::on_response] result: {}, time elapsed {:?}",
-            result,
+            "[RelayerLogger::on_response] the size of result: {}, time elapsed {:?}",
+            result.len(),
             started_at.elapsed()
         );
     }

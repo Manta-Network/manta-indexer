@@ -26,10 +26,11 @@ mod sync;
 mod types;
 mod utils;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<()> {
     // initialize logger
     utils::init_logger();
 
-    Ok(())
+    relay::start_relayer_server().await;
+    futures::future::pending().await
 }

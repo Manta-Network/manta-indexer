@@ -14,6 +14,9 @@ thiserror = "1.0.32"
 # substrate crates
 frame-support = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
 sp-core = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
+sp-rpc = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
+sp-runtime = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
+sp-version = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
 
 # log crates
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
@@ -25,6 +28,7 @@ manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5
 # general crates
 chrono = "0.4.22"
 codec = { version = "3.1.5", package = "parity-scale-codec" }
+futures = { version = "0.3.24", features = ["executor"] }
 hex = "0.4.3"
 jsonrpsee = { version = "0.15.1", features = ["full"] }
 rusqlite = { version = "0.28.0", features = ["bundled"] }
