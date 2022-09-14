@@ -1,5 +1,5 @@
 import {Keyring, decodeAddress, encodeAddress} from '@polkadot/keyring';
-import {hexToU8a, isHex} from '@polkadot/util';
+import {hexToU8a, isHex, BN} from '@polkadot/util';
 import {ApiPromise, WsProvider} from'@polkadot/api';
 
 async function createPromiseApi(nodeAddress: string) {
@@ -27,6 +27,18 @@ async function main() {
     const who = "dmyBqgFxMPZs1wKz8vFjv7nD4RBu4HeYhZTsGxSDU1wXQV15R";
     const accountInfo = await api.query.system.account(who);
     console.log(accountInfo.toHuman());
+
+    // make a transfer
+    const seed = "//Alice";
+    const keyring = new Keyring({ type: 'sr25519', ss58Format: 78 });
+    const sender = keyring.addFromUri(seed);
+
+    const amount = 12345;
+    const decimal = api.registry.chainDecimals;
+    const factor = new BN(10).pow(new BN(decimal));
+    const toTransfer = new BN(amount).mul(factor);
+    const txHash = await api.tx.balances.transfer(who, toTransfer).signAndSend(sender);
+    console.log(txHash);
 }
 
 main().catch(console.error);

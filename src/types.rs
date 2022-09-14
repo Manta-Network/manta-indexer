@@ -50,14 +50,14 @@ pub struct RpcMethods {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Health {
-	/// Number of connected peers
-	pub peers: usize,
-	/// Is the node syncing
-	pub is_syncing: bool,
-	/// Should this node have any peers
-	///
-	/// Might be false for local chains or when running without discovery.
-	pub should_have_peers: bool,
+    /// Number of connected peers
+    pub peers: usize,
+    /// Is the node syncing
+    pub is_syncing: bool,
+    /// Should this node have any peers
+    ///
+    /// Might be false for local chains or when running without discovery.
+    pub should_have_peers: bool,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize)]
