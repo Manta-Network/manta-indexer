@@ -53,6 +53,17 @@ pub struct MantaRpcRelayServer {
     pub client: Arc<WsClient>,
 }
 
+/// MantaRelayApi declare the relaying part of Indexer.
+/// Each rpc method below is actually also declared in full node and used by our DApp.
+///
+/// You can trace all available rpc_api at:
+/// https://github.com/paritytech/substrate/tree/master/client/rpc-api
+///
+/// for example state api is:
+/// https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs
+///
+/// the detail usage of `rpc(client, server)` is:
+/// https://docs.rs/jsonrpsee-proc-macros/0.15.1/jsonrpsee_proc_macros/attr.rpc.html
 #[rpc(client, server)]
 pub trait MantaRelayApi {
     #[method(name = "state_getMetadata")]
@@ -80,12 +91,12 @@ pub trait MantaRelayApi {
     async fn system_health(&self) -> RpcResult<Health>;
 
     #[subscription(
-		name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
-		unsubscribe = "state_unsubscribeRuntimeVersion",
-		aliases = ["chain_subscribeRuntimeVersion"],
-		unsubscribe_aliases = ["chain_unsubscribeRuntimeVersion"],
-		item = sp_version::RuntimeVersion,
-	)]
+    name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
+    unsubscribe = "state_unsubscribeRuntimeVersion",
+    aliases = ["chain_subscribeRuntimeVersion"],
+    unsubscribe_aliases = ["chain_unsubscribeRuntimeVersion"],
+    item = sp_version::RuntimeVersion,
+    )]
     fn subscribe_runtime_version(&self);
 
     #[method(name = "state_queryStorageAt")]
@@ -105,10 +116,10 @@ pub trait MantaRelayApi {
     async fn finalized_head(&self) -> RpcResult<Hash>;
 
     #[subscription(
-		name = "state_subscribeStorage" => "state_storage",
-		unsubscribe = "state_unsubscribeStorage",
-		item = StorageChangeSet<Hash>,
-	)]
+    name = "state_subscribeStorage" => "state_storage",
+    unsubscribe = "state_unsubscribeStorage",
+    item = StorageChangeSet < Hash >,
+    )]
     fn subscribe_storage(&self, keys: Option<Vec<StorageKey>>);
 
     #[subscription(name = "sub" => "subNotif", unsubscribe = "unsub", item = String)]

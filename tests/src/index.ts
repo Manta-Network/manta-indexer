@@ -1,28 +1,46 @@
 import {Keyring, decodeAddress, encodeAddress} from '@polkadot/keyring';
 import {hexToU8a, isHex, BN} from '@polkadot/util';
-import {ApiPromise, WsProvider} from'@polkadot/api';
+import {ApiPromise, WsProvider} from '@polkadot/api';
 
 async function createPromiseApi(nodeAddress: string) {
     const wsProvider = new WsProvider(nodeAddress);
 
-    const api = new ApiPromise({ provider: wsProvider });
+    const api = new ApiPromise({provider: wsProvider});
     await api.isReady;
     return api;
 }
 
 function isValidAddress(address: string) {
     try {
-        encodeAddress(isHex(address) ? hexToU8a(address): decodeAddress(address));
-        return true;  
+        encodeAddress(isHex(address) ? hexToU8a(address) : decodeAddress(address));
+        return true;
     } catch (error) {
         return false;
     }
 }
 
 async function main() {
-    let addr = "ws://127.0.0.1:9988";
-    // let addr = "wss://ws.rococo.dolphin.engineering:443";
-    let api = await createPromiseApi(addr);
+    let args = parse_args();
+    let test_case: string = args['test_case'];
+
+    let ws = args["ws"];
+    let ws_uri;
+    switch (ws) {
+        case "rococo":
+            ws_uri = "wss://ws.rococo.dolphin.engineering:443";
+            break;
+        default:
+            ws_uri = ws;
+    }
+    let api = await createPromiseApi(ws_uri);
+
+    let all = (test_case === "all");
+    // just test the ApiPromise connection process.
+    // so when api object is created, just exit.
+    if (all || test_case === "connection") {
+        process.exit(0)
+    }
+
 
     const who = "dmyBqgFxMPZs1wKz8vFjv7nD4RBu4HeYhZTsGxSDU1wXQV15R";
     const accountInfo = await api.query.system.account(who);
@@ -30,7 +48,7 @@ async function main() {
 
     // make a transfer
     const seed = "//Alice";
-    const keyring = new Keyring({ type: 'sr25519', ss58Format: 78 });
+    const keyring = new Keyring({type: 'sr25519', ss58Format: 78});
     const sender = keyring.addFromUri(seed);
 
     const amount = 12345;
@@ -38,7 +56,20 @@ async function main() {
     const factor = new BN(10).pow(new BN(decimal));
     const toTransfer = new BN(amount).mul(factor);
     const txHash = await api.tx.balances.transfer(who, toTransfer).signAndSend(sender);
-    console.log(txHash);
+    let counter = 0;
+    const unsub = await api.query.timestamp.now((moment: bigint) => {
+        console.log(`the last block has a timestamp of ${moment}`)
+        counter++;
+        if (counter === 3) {
+            // @ts-ignore
+            unsub();
+        }
+    })
+
 }
 
 main().catch(console.error);
+
+function parse_args(): { [key: string]: string; } {
+    return require("minimist")(process.argv.slice(2))
+}
