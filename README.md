@@ -8,17 +8,17 @@ we will rewrite all rpc api that subx contains.
 
 *[State API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs)*
 
-+ [ ] state_call
-+ [ ] state_getKeys
-+ [ ] state_getPairs
-+ [ ] state_getKeysPaged
++ [x] state_call
++ [x] ~~state_getKeys(duplicated)~~
++ [x] state_getPairs
++ [x] state_getKeysPaged
 + [ ] state_getStorage
 + [ ] state_getStorageHash
 + [ ] state_getStorageSize
 + [x] state_getMetadata
 + [ ] state_getRuntimeVersion
 + [ ] state_queryStorage
-+ [ ] state_queryStorageAt
++ [x] state_queryStorageAt
 + [ ] state_getReadProof
 + [ ] state_subscribeStorage
 + [ ] state_traceBlock

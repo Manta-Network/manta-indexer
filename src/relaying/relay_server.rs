@@ -88,6 +88,28 @@ pub trait MantaRelayApi {
         at: Option<Hash>,
     ) -> RpcResult<Vec<StorageChangeSet<Hash>>>;
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L37
+    #[method(name = "state_call", aliases = ["state_callAt"])]
+    async fn call(&self, name: String, bytes: Bytes, hash: Option<Hash>) -> RpcResult<Bytes>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L45
+    #[method(name = "state_getPairs")]
+    async fn storage_pairs(
+        &self,
+        prefix: StorageKey,
+        hash: Option<Hash>,
+    ) -> RpcResult<Vec<(StorageKey, StorageData)>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L53
+    #[method(name = "state_getKeysPaged", aliases = ["state_getKeysPagedAt"])]
+    async fn storage_keys_paged(
+        &self,
+        prefix: Option<StorageKey>,
+        count: u32,
+        start_key: Option<StorageKey>,
+        hash: Option<Hash>,
+    ) -> RpcResult<Vec<StorageKey>>;
+
     #[method(name = "chain_getBlockHash", aliases = ["chain_getHead"])]
     async fn block_hash(
         &self,
@@ -149,9 +171,41 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
     /// directly async method
     async fn metadata(&self) -> RpcResult<Bytes> {
-        Ok(self.dmc.request::<Bytes>("state_getMetadata", None).await?)
+        Ok(self.dmc.request("state_getMetadata", None).await?)
     }
 
+    async fn query_storage_at(
+        &self,
+        keys: Vec<StorageKey>,
+        at: Option<Hash>,
+    ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
+        Ok(self.dmc.request("state_queryStorageAt", rpc_params!(keys, at)).await?)
+    }
+
+    async fn call(&self, name: String, bytes: Bytes, hash: Option<Hash>) -> RpcResult<Bytes> {
+        Ok(self.dmc.request("state_call", rpc_params!(name, bytes, hash)).await?)
+    }
+
+    async fn storage_pairs(
+        &self,
+        prefix: StorageKey,
+        hash: Option<Hash>,
+    ) -> RpcResult<Vec<(StorageKey, StorageData)>> {
+        Ok(self.dmc.request("state_getPairs", rpc_params!(prefix, hash)).await?)
+    }
+
+    async fn storage_keys_paged(
+        &self,
+        prefix: Option<StorageKey>,
+        count: u32,
+        start_key: Option<StorageKey>,
+        hash: Option<Hash>,
+    ) -> RpcResult<Vec<StorageKey>> {
+        Ok(self.dmc.request("state_getKeysPaged", rpc_params!(prefix, count, start_key, hash)).await?)
+    }
+
+
+    // now
 
     fn sub_override_notif_method(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
         tokio::spawn(async move {
@@ -239,19 +293,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(health)
     }
 
-    async fn query_storage_at(
-        &self,
-        keys: Vec<StorageKey>,
-        at: Option<Hash>,
-    ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
-        let param = rpc_params![keys];
-        let storage = self
-            .dmc
-            .request::<Vec<StorageChangeSet<Hash>>>("state_queryStorageAt", param)
-            .await?;
-
-        Ok(storage)
-    }
 
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
         let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
