@@ -49,8 +49,12 @@ pub type BlockNumber = u32;
 /// Block header type as expected by this runtime.
 pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
 
+/// The whole relaying server implementation.
 pub struct MantaRpcRelayServer {
-    pub client: Arc<WsClient>,
+    // dmc = directly_method_client, use this client to relay all
+    // sync and async method, we manage the subscription method in other single field.
+    // TODO make it generic and wrap a pooling client.
+    pub dmc: Arc<WsClient>,
 }
 
 /// MantaRelayApi declare the relaying part of Indexer.
@@ -66,8 +70,23 @@ pub struct MantaRpcRelayServer {
 /// https://docs.rs/jsonrpsee-proc-macros/0.15.1/jsonrpsee_proc_macros/attr.rpc.html
 #[rpc(client, server)]
 pub trait MantaRelayApi {
+    /// sync fn declaration.
+
+    /// async fn declaration.
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L78
+    // NOTE: origin has a generic `hash` param but not sure the usage, just ignore to forbidden parse error.
+    // trait bounds: https://github.com/paritytech/substrate/blob/master/utils/frame/rpc/support/src/lib.rs#L181
     #[method(name = "state_getMetadata")]
     async fn metadata(&self) -> RpcResult<Bytes>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L99
+    #[method(name = "state_queryStorageAt")]
+    async fn query_storage_at(
+        &self,
+        keys: Vec<StorageKey>,
+        at: Option<Hash>,
+    ) -> RpcResult<Vec<StorageChangeSet<Hash>>>;
 
     #[method(name = "chain_getBlockHash", aliases = ["chain_getHead"])]
     async fn block_hash(
@@ -90,22 +109,6 @@ pub trait MantaRelayApi {
     #[method(name = "system_health")]
     async fn system_health(&self) -> RpcResult<Health>;
 
-    #[subscription(
-    name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
-    unsubscribe = "state_unsubscribeRuntimeVersion",
-    aliases = ["chain_subscribeRuntimeVersion"],
-    unsubscribe_aliases = ["chain_unsubscribeRuntimeVersion"],
-    item = sp_version::RuntimeVersion,
-    )]
-    fn subscribe_runtime_version(&self);
-
-    #[method(name = "state_queryStorageAt")]
-    async fn query_storage_at(
-        &self,
-        keys: Vec<StorageKey>,
-        at: Option<Hash>,
-    ) -> RpcResult<Vec<StorageChangeSet<Hash>>>;
-
     #[method(name = "chain_getHeader")]
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>>;
 
@@ -114,6 +117,16 @@ pub trait MantaRelayApi {
 
     #[method(name = "chain_getFinalizedHead", aliases = ["chain_getFinalisedHead"])]
     async fn finalized_head(&self) -> RpcResult<Hash>;
+
+
+    #[subscription(
+    name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
+    unsubscribe = "state_unsubscribeRuntimeVersion",
+    aliases = ["chain_subscribeRuntimeVersion"],
+    unsubscribe_aliases = ["chain_unsubscribeRuntimeVersion"],
+    item = sp_version::RuntimeVersion,
+    )]
+    fn subscribe_runtime_version(&self);
 
     #[subscription(
     name = "state_subscribeStorage" => "state_storage",
@@ -131,6 +144,15 @@ pub trait MantaRelayApi {
 
 #[async_trait]
 impl MantaRelayApiServer for MantaRpcRelayServer {
+    /// directly sync method
+
+
+    /// directly async method
+    async fn metadata(&self) -> RpcResult<Bytes> {
+        Ok(self.dmc.request::<Bytes>("state_getMetadata", None).await?)
+    }
+
+
     fn sub_override_notif_method(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
         tokio::spawn(async move {
             let stream = tokio_stream::iter(["one", "two", "three"]);
@@ -145,13 +167,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(())
     }
 
-    async fn metadata(&self) -> RpcResult<Bytes> {
-        let metadata = self
-            .client
-            .request::<Bytes>("state_getMetadata", None)
-            .await?;
-        Ok(metadata)
-    }
 
     async fn block_hash(
         &self,
@@ -159,7 +174,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     ) -> RpcResult<ListOrValue<Option<Hash>>> {
         let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
         let block = self
-            .client
+            .dmc
             .request::<ListOrValue<Option<Hash>>>("chain_getBlockHash", _hash)
             .await?;
 
@@ -169,7 +184,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {
         let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
         let rt_version = self
-            .client
+            .dmc
             .request::<sp_version::RuntimeVersion>("state_getRuntimeVersion", _hash)
             .await?;
 
@@ -177,14 +192,14 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn system_chain(&self) -> RpcResult<String> {
-        let chain = self.client.request::<String>("system_chain", None).await?;
+        let chain = self.dmc.request::<String>("system_chain", None).await?;
 
         Ok(chain)
     }
 
     async fn system_properties(&self) -> RpcResult<Properties> {
         let properties = self
-            .client
+            .dmc
             .request::<Properties>("system_properties", None)
             .await?;
 
@@ -193,7 +208,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
     async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
         let methods = self
-            .client
+            .dmc
             .request::<RpcMethods>("rpc_methods", None)
             .await?;
 
@@ -202,7 +217,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
     // Subscription methods must not be `async`
     fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        let client = self.client.clone();
+        let client = self.dmc.clone();
         tokio::spawn(async move {
             match client
                 .request::<sp_version::RuntimeVersion>("state_getRuntimeVersion", None)
@@ -219,7 +234,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn system_health(&self) -> RpcResult<Health> {
-        let health = self.client.request::<Health>("system_health", None).await?;
+        let health = self.dmc.request::<Health>("system_health", None).await?;
 
         Ok(health)
     }
@@ -231,7 +246,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
         let param = rpc_params![keys];
         let storage = self
-            .client
+            .dmc
             .request::<Vec<StorageChangeSet<Hash>>>("state_queryStorageAt", param)
             .await?;
 
@@ -241,7 +256,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
         let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
         let header = self
-            .client
+            .dmc
             .request::<Option<Header>>("chain_getHeader", _hash)
             .await?;
 
@@ -250,7 +265,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
     async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash> {
         let hash = self
-            .client
+            .dmc
             .request::<Hash>("author_submitExtrinsic", rpc_params![extrinsic])
             .await?;
 
@@ -259,7 +274,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
     async fn finalized_head(&self) -> RpcResult<Hash> {
         let hash = self
-            .client
+            .dmc
             .request::<Hash>("chain_getFinalizedHead", None)
             .await?;
 
@@ -271,7 +286,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         mut sink: SubscriptionSink,
         keys: Option<Vec<StorageKey>>,
     ) -> SubscriptionResult {
-        let client = self.client.clone();
+        let client = self.dmc.clone();
         let _keys = keys.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
         tokio::spawn(async move {
             match client
@@ -307,7 +322,7 @@ pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
     let client = WsClientBuilder::default().build(&full_node).await?;
 
     let relayer = MantaRpcRelayServer {
-        client: Arc::new(client),
+        dmc: Arc::new(client),
     };
 
     let addr = server.local_addr()?;
