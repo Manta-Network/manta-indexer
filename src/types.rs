@@ -88,6 +88,15 @@ pub struct PullResponse {
     pub senders_receivers_total: u128,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(C)]
+pub struct Shard {
+    pub shard_index: u8,
+    pub next_index: u64,
+    // utxo: (Utxo, EncryptedNote),
+    pub utxo: Vec<u8>,
+}
+
 // Currently serde::Deserialize doesn't support an array whose length is bigger than 16.
 // API: https://docs.rs/serde/latest/serde/trait.Deserialize.html#
 // Track issue: https://github.com/serde-rs/serde/issues/1937

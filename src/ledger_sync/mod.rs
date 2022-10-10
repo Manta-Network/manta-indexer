@@ -15,25 +15,25 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::logger::IndexerLogger;
+use crate::types::PullResponse;
 use anyhow::Result;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::{Checkpoint as _, RawCheckpoint};
+use manta_pay::signer::{Checkpoint, RawCheckpoint};
 use rusqlite::{Connection, Params};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub type PullResponse = Vec<u8>;
-pub type Checkpoint = Vec<u8>;
+pub mod sync;
 
 #[rpc(server, namespace = "mantaPay")]
 pub trait MantaPayIndexerApi {
-    #[method(name = "pullLedgerDiff", blocking)]
-    fn pull_ledger_diff(
+    #[method(name = "pullLedgerDiff")] // no blocking mode, we just query all shards from db
+    async fn pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
         max_receivers: u64,
@@ -42,37 +42,43 @@ pub trait MantaPayIndexerApi {
 }
 
 pub struct MantaPayIndexerServer {
-    pub db: Arc<Mutex<Connection>>,
+    pub db: Arc<Mutex<Connection>>, // db handler
+    pub ws: String,                 // the websocket url to local node
 }
 
 #[async_trait]
 impl MantaPayIndexerApiServer for MantaPayIndexerServer {
-    fn pull_ledger_diff(
+    async fn pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
         max_receivers: u64,
         max_senders: u64,
     ) -> RpcResult<PullResponse> {
-        // let db = self.db;
-        // let query = format!("select k1, k2, utxo from ")
-        // db.execute()
+        let db = self.db.lock().await;
 
-        Ok(b"Indexer server started!".to_vec())
+        let url = &self.ws;
+        let client = crate::utils::create_ws_client(url).await.unwrap();
+        let response = sync::pull_ledger_diff(&db, &checkpoint, max_receivers, max_senders);
+
+        Ok(response)
     }
 }
 
-pub async fn start_server() -> Result<(SocketAddr, WsServerHandle)> {
-    let server = WsServerBuilder::new()
-        .set_middleware(IndexerLogger)
-        .build("127.0.0.1:9800")
-        .await?;
+impl MantaPayIndexerServer {
+    pub async fn start_server() -> Result<(SocketAddr, WsServerHandle)> {
+        let server = WsServerBuilder::new()
+            .set_middleware(IndexerLogger)
+            .build("127.0.0.1:9800")
+            .await?;
 
-    let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/indexer.db");
-    let db = crate::utils::open_db(db_path).await?;
+        let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/indexer.db");
+        let db = crate::utils::open_db(db_path).await?;
 
-    let rpc = MantaPayIndexerServer { db };
+        let ws = "127.0.0.1:9944".to_owned();
+        let rpc = Self { db, ws };
 
-    let addr = server.local_addr()?;
-    let handle = server.start(rpc.into_rpc())?;
-    Ok((addr, handle))
+        let addr = server.local_addr()?;
+        let handle = server.start(rpc.into_rpc())?;
+        Ok((addr, handle))
+    }
 }

@@ -19,6 +19,8 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+// Initialize sqlite as WAL mode(Write-Ahead Logging)
+// https://sqlite.org/wal.html
 pub async fn initialize_db(conn: Arc<Mutex<Connection>>) -> Result<()> {
     let _conn = conn.lock().await;
     _conn.execute("PRAGMA synchronous = OFF;", ())?;

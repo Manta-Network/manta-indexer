@@ -20,9 +20,8 @@ mod constants;
 mod db;
 mod errors;
 mod logger;
-mod pull_service;
+mod ledger_sync;
 mod relay;
-mod sync;
 mod types;
 mod utils;
 
@@ -31,6 +30,7 @@ async fn main() -> Result<()> {
     // initialize logger
     utils::init_logger();
 
-    relay::start_relayer_server().await;
+    // relay::start_relayer_server().await;
+    let _ = crate::ledger_sync::MantaPayIndexerServer::start_server().await;
     futures::future::pending().await
 }
