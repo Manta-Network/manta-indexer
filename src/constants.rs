@@ -23,3 +23,6 @@ pub const MANTA_PAY_STORAGE_VOID_NAME: [u8; 27] = *b"VoidNumberSetInsertionOrder
 
 pub const PULL_MAX_SENDER_UPDATE_SIZE: u64 = 32768;
 pub const PULL_MAX_RECEIVER_UPDATE_SIZE: u64 = 32768;
+
+pub const VOID_NUMBER_TBALE_NAME: &'static str = "void_number";
+pub const SHARD_TBALE_NAME: &'static str = "shard";

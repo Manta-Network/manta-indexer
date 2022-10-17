@@ -22,12 +22,11 @@ use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::{Checkpoint, RawCheckpoint};
-use rusqlite::{Connection, Params};
+use manta_pay::signer::Checkpoint;
+use sqlx::sqlite::SqlitePool;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
+pub mod pull;
 pub mod sync;
 
 #[rpc(server, namespace = "mantaPay")]
@@ -42,8 +41,8 @@ pub trait MantaPayIndexerApi {
 }
 
 pub struct MantaPayIndexerServer {
-    pub db: Arc<Mutex<Connection>>, // db handler
-    pub ws: String,                 // the websocket url to local node
+    pub db: SqlitePool, // db pool
+    pub ws: String,     // the websocket url to local node
 }
 
 #[async_trait]
@@ -54,13 +53,14 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
         max_receivers: u64,
         max_senders: u64,
     ) -> RpcResult<PullResponse> {
-        let db = self.db.lock().await;
+        let db = self.db.clone();
 
         let url = &self.ws;
-        let client = crate::utils::create_ws_client(url).await.unwrap();
-        let response = sync::pull_ledger_diff(&db, &checkpoint, max_receivers, max_senders);
+        let client = crate::utils::create_ws_client(url).await?;
+        // let response = sync::pull_ledger_diff(&db, &checkpoint, max_receivers, max_senders);
 
-        Ok(response)
+        // Ok(response)
+        todo!();
     }
 }
 
@@ -72,7 +72,7 @@ impl MantaPayIndexerServer {
             .await?;
 
         let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/indexer.db");
-        let db = crate::utils::open_db(db_path).await?;
+        let db = crate::db::initialize_db_pool().await?;
 
         let ws = "127.0.0.1:9944".to_owned();
         let rpc = Self { db, ws };

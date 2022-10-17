@@ -14,28 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use anyhow::Result;
-use dotenvy::dotenv;
-
-mod constants;
-mod db;
-mod errors;
-mod ledger_sync;
-mod logger;
-mod relay;
-mod types;
-mod utils;
-
-pub use errors::*;
-
-#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
-async fn main() -> Result<()> {
-    dotenv().ok();
-
-    // initialize logger
-    utils::init_logger();
-
-    // // relay::start_relayer_server().await;
-    // let _ = crate::ledger_sync::MantaPayIndexerServer::start_server().await;
-    futures::future::pending().await
+fn main() {
+    println!("cargo:rerun-if-changed=migrations");
 }

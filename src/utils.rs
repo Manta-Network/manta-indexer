@@ -21,14 +21,11 @@ use frame_support::{storage::storage_prefix, StorageHasher, Twox64Concat};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use rusqlite::Connection;
-use sp_core::storage::StorageKey;
+use sp_core::storage::{StorageData, StorageKey};
 use std::{
     fs::File,
     io::{prelude::*, BufReader},
-    sync::Arc,
 };
-use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use toml::Value;
 
@@ -41,14 +38,6 @@ pub fn read_config() -> Result<Value> {
 
     let value = contents.parse::<Value>()?;
     Ok(value)
-}
-
-// open a db from the local
-pub async fn open_db(path: &str) -> Result<Arc<Mutex<Connection>>> {
-    let db = Connection::open(path)?;
-    let db = Arc::new(Mutex::new(db));
-    println!("{}", db.lock().await.is_autocommit());
-    Ok(db)
 }
 
 pub fn init_logger() {
@@ -132,16 +121,35 @@ pub async fn is_full_node_started(ws: &WsClient) -> Result<bool> {
     Ok(latest_block != current_block)
 }
 
-pub async fn get_latest_finalized_head(ws: &WsClient) -> Result<String> {
-    let finalized_head = ws.request::<String>("chain_getFinalisedHead", None).await?;
-
-    Ok(finalized_head)
-}
-
 pub async fn submit_extrinsic(ws: &WsClient, extrinsic: &str) -> Result<String> {
     let finalized_head = ws
         .request::<String>("author_submitExtrinsic", rpc_params![extrinsic])
         .await?;
+
+    Ok(finalized_head)
+}
+
+pub async fn get_storage_hash(ws: &WsClient) -> Result<Option<String>> {
+    let finalized_head = get_latest_finalized_head(ws).await?;
+    let prefix = storage_prefix(&MANTA_PAY_KEY_PREFIX, &MANTA_PAY_STORAGE_SHARDS_NAME);
+    let params = rpc_params![hex::encode(prefix), finalized_head];
+    let storage_hash = ws
+        .request::<Option<String>>("state_getStorageHash", params.clone())
+        .await?;
+
+    Ok(storage_hash)
+}
+
+pub async fn get_storage_by_key(ws: &WsClient, key: &[u8]) -> Result<StorageData> {
+    let params = rpc_params![hex::encode(key)];
+    let response = ws
+        .request::<StorageData>("state_getStorageAt", params)
+        .await?;
+    Ok(response)
+}
+
+pub async fn get_latest_finalized_head(ws: &WsClient) -> Result<String> {
+    let finalized_head = ws.request::<String>("chain_getFinalisedHead", None).await?;
 
     Ok(finalized_head)
 }

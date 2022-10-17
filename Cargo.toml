@@ -8,8 +8,8 @@ repository = 'https://github.com/Manta-Network/manta-indexer/'
 
 [dependencies]
 # error handler crates
-anyhow = "1.0.61"
-thiserror = "1.0.32"
+anyhow = "1.0.65"
+thiserror = "1.0.37"
 
 # substrate crates
 frame-support = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
@@ -28,20 +28,22 @@ manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5
 # general crates
 chrono = "0.4.22"
 codec = { version = "3.1.5", package = "parity-scale-codec" }
+dotenvy = "0.15.5"
 futures = { version = "0.3.24", features = ["executor"] }
 hex = "0.4.3"
 jsonrpsee = { version = "0.15.1", features = ["full"] }
-rusqlite = { version = "0.28.0", features = ["bundled"] }
 prometheus = "0.13.2"
+sqlx = { version = "0.6.2", features = ["sqlite", "runtime-tokio-rustls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.21", features = ["rt", "macros", "sync", "rt-multi-thread"] }
-tokio-stream = "0.1.9"
+tokio-stream = "0.1.11"
 toml = "0.5"
 
 [dev-dependencies]
 criterion = "0.4.0"
 rand = "0.8.5"
+tempfile = "3.3.0"
 
 [[bench]]
 name = "db_bench"

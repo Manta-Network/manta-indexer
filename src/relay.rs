@@ -27,8 +27,6 @@ use jsonrpsee::{
     types::{EmptyParams, SubscriptionResult},
     SubscriptionSink,
 };
-use manta_pay::signer::{Checkpoint as _, RawCheckpoint};
-use rusqlite::{Connection, Params};
 use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
@@ -36,7 +34,6 @@ use sp_runtime::traits::BlakeTwo256;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 
 pub type Hash = sp_core::H256;
 
@@ -110,30 +107,10 @@ pub trait MantaRelayApi {
 		item = StorageChangeSet<Hash>,
 	)]
     fn subscribe_storage(&self, keys: Option<Vec<StorageKey>>);
-
-    #[subscription(name = "sub" => "subNotif", unsubscribe = "unsub", item = String)]
-    fn sub_override_notif_method(&self);
-
-    #[subscription(name = "subscribe", item = String)]
-    fn sub(&self);
 }
 
 #[async_trait]
 impl MantaRelayApiServer for MantaRpcRelayServer {
-    fn sub_override_notif_method(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        tokio::spawn(async move {
-            let stream = tokio_stream::iter(["one", "two", "three"]);
-            sink.pipe_from_stream(stream).await;
-        });
-        Ok(())
-    }
-
-    fn sub(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        let _ = sink.send(&"Response_A");
-        let _ = sink.send(&"Response_B");
-        Ok(())
-    }
-
     async fn metadata(&self) -> RpcResult<Bytes> {
         let metadata = self
             .client
@@ -312,18 +289,5 @@ mod tests {
     async fn get_metadata_should_work() {
         let url = "wss://ws.calamari.systems:443";
         assert!(true);
-    }
-
-    #[tokio::test]
-    async fn subscriber_should_work() {
-        start_relayer_server().await;
-        let url = "ws://127.0.0.1:9988";
-        let client = WsClientBuilder::default().build(&url).await.unwrap();
-
-        let mut sub = client.sub().await.unwrap();
-        let first_recv = sub.next().await.unwrap().unwrap();
-        assert_eq!(first_recv, "Response_A".to_string());
-        let second_recv = sub.next().await.unwrap().unwrap();
-        assert_eq!(second_recv, "Response_B".to_string());
     }
 }
