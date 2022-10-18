@@ -312,46 +312,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         mut sink: SubscriptionSink,
         keys: Option<Vec<StorageKey>>,
     ) -> SubscriptionResult {
-        let key = sink.sub_keys().ok_or_else(|| {
-            error!("{} get a subscription error, call before accept", sink.method_name());
-            anyhow!("")
-        })?;
-
-        let client;
-        if !self.sub_clients.clients.contains_key(&key.conn_id) {
-            let uri = self.backend_uri.as_str();
-            match INIT_RUNTIME.block_on(WsClientBuilder::default().build(uri)) {
-                Ok(cli) => client = Arc::new(cli),
-                Err(e) => return Err(SubscriptionEmptyError)
-            }
-            self.sub_clients.clients.insert(key.conn_id, client.clone());
-        } else {
-            client = self.sub_clients.clients.get(&key.conn_id).unwrap().clone();
-        }
-
-        let params = rpc_params!([keys]);
-        tokio::spawn(async move {
-            match client.subscribe::<StorageChangeSet<Hash>>("state_subscribeStorage", params, "state_unsubscribeStorage").await {
-                Ok(mut channel) => {
-                    // build a pipeline, client receive a message from full node and send to sink.
-                    while let Some(msg) = channel.next().await {
-                        match msg {
-                            Ok(mut inner) => {
-                                let _ = sink.send(&mut inner);
-                            }
-                            Err(e) => {
-                                error!("subscribeStorage get some error: {:?}", e);
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    // close the upstream subscription channel by error.
-                    sink.close(CallError::Failed(anyhow!("{:?}", e)));
-                }
-            }
-        });
-        Ok(())
+        Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(sink, "state_subscribeStorage", rpc_params!([keys]), "state_unsubscribeStorage")?)
     }
 
     async fn system_health(&self) -> RpcResult<Health> {
@@ -408,7 +369,10 @@ pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
     let relayer = MantaRpcRelayServer {
         backend_uri: full_node.to_string(),
         dmc: Arc::new(client),
-        sub_clients: Arc::new(Default::default()),
+        sub_clients: Arc::new(MtoMSubClientPool {
+            backend_uri: full_node.to_string(),
+            clients: Default::default(),
+        }),
     };
 
     let addr = server.local_addr()?;
