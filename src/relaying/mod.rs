@@ -9,6 +9,7 @@
 /// M ws connections from Dapp anywhere (M >> N).
 pub mod relay_server;
 pub mod middleware;
+mod sub_client_pool;
 
 use std::net::SocketAddr;
 use anyhow::{bail, Result};

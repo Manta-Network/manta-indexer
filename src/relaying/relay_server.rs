@@ -16,7 +16,7 @@
 
 use crate::logger::RelayerLogger;
 use crate::types::{Health, RpcMethods};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
@@ -34,9 +34,14 @@ use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
 use std::net::SocketAddr;
+use std::ops::Sub;
 use std::sync::Arc;
 use std::time::Duration;
+use frame_support::log::error;
+use jsonrpsee::types::error::CallError;
+use jsonrpsee::types::SubscriptionEmptyError;
 use tokio::sync::Mutex;
+use crate::relaying::sub_client_pool::{INIT_RUNTIME, MtoMSubClientPool};
 
 pub type Hash = sp_core::H256;
 
@@ -51,11 +56,23 @@ pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
 
 /// The whole relaying server implementation.
 pub struct MantaRpcRelayServer {
+    pub backend_uri: String,
+
     // dmc = directly_method_client, use this client to relay all
     // sync and async method, we manage the subscription method in other single field.
     // TODO make it generic and wrap a pooling client.
     pub dmc: Arc<WsClient>,
+
+    // use this client pool to manage all subscription connection.
+    // version 1: m to m. each sub go with a new single conn.
+    // TODO version 2: m to 1, all sub go with single conn.
+    // TODO version 3: m to n, all sub go with a pool with n conn.
+    // TODO make it generic.
+    pub sub_clients: Arc<MtoMSubClientPool>,
 }
+
+/// The whole relaying
+pub(crate) struct MantaRpcRelayClient {}
 
 /// MantaRelayApi declare the relaying part of Indexer.
 /// Each rpc method below is actually also declared in full node and used by our DApp.
@@ -140,7 +157,7 @@ pub trait MantaRelayApi {
     #[method(name = "chain_getFinalizedHead", aliases = ["chain_getFinalisedHead"])]
     async fn finalized_head(&self) -> RpcResult<Hash>;
 
-
+    /// subscription fn declaration.
     #[subscription(
     name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
     unsubscribe = "state_unsubscribeRuntimeVersion",
@@ -150,6 +167,7 @@ pub trait MantaRelayApi {
     )]
     fn subscribe_runtime_version(&self);
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L120
     #[subscription(
     name = "state_subscribeStorage" => "state_storage",
     unsubscribe = "state_unsubscribeStorage",
@@ -269,7 +287,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(methods)
     }
 
-    // Subscription methods must not be `async`
     fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
         let client = self.dmc.clone();
         tokio::spawn(async move {
@@ -284,6 +301,56 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             }
         });
 
+        Ok(())
+    }
+
+    /// subscription methods.
+    /// Subscription methods must not be `async`
+
+    fn subscribe_storage(
+        &self,
+        mut sink: SubscriptionSink,
+        keys: Option<Vec<StorageKey>>,
+    ) -> SubscriptionResult {
+        let key = sink.sub_keys().ok_or_else(|| {
+            error!("{} get a subscription error, call before accept", sink.method_name());
+            anyhow!("")
+        })?;
+
+        let client;
+        if !self.sub_clients.clients.contains_key(&key.conn_id) {
+            let uri = self.backend_uri.as_str();
+            match INIT_RUNTIME.block_on(WsClientBuilder::default().build(uri)) {
+                Ok(cli) => client = Arc::new(cli),
+                Err(e) => return Err(SubscriptionEmptyError)
+            }
+            self.sub_clients.clients.insert(key.conn_id, client.clone());
+        } else {
+            client = self.sub_clients.clients.get(&key.conn_id).unwrap().clone();
+        }
+
+        let params = rpc_params!([keys]);
+        tokio::spawn(async move {
+            match client.subscribe::<StorageChangeSet<Hash>>("state_subscribeStorage", params, "state_unsubscribeStorage").await {
+                Ok(mut channel) => {
+                    // build a pipeline, client receive a message from full node and send to sink.
+                    while let Some(msg) = channel.next().await {
+                        match msg {
+                            Ok(mut inner) => {
+                                let _ = sink.send(&mut inner);
+                            }
+                            Err(e) => {
+                                error!("subscribeStorage get some error: {:?}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    // close the upstream subscription channel by error.
+                    sink.close(CallError::Failed(anyhow!("{:?}", e)));
+                }
+            }
+        });
         Ok(())
     }
 
@@ -321,30 +388,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
         Ok(hash)
     }
-
-    fn subscribe_storage(
-        &self,
-        mut sink: SubscriptionSink,
-        keys: Option<Vec<StorageKey>>,
-    ) -> SubscriptionResult {
-        let client = self.dmc.clone();
-        let _keys = keys.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
-        tokio::spawn(async move {
-            match client
-                .request::<Vec<StorageChangeSet<Hash>>>("state_queryStorageAt", _keys)
-                .await
-            {
-                Ok(storage) => {
-                    println!("storage: {:?}", storage);
-                    sink.send(&storage)
-                        .map_err(|e| JsonRpseeError::Custom(e.to_string()))
-                }
-                Err(e) => Err(e),
-            }
-        });
-
-        Ok(())
-    }
 }
 
 pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
@@ -363,7 +406,9 @@ pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
     let client = WsClientBuilder::default().build(&full_node).await?;
 
     let relayer = MantaRpcRelayServer {
+        backend_uri: full_node.to_string(),
         dmc: Arc::new(client),
+        sub_clients: Arc::new(Default::default()),
     };
 
     let addr = server.local_addr()?;
