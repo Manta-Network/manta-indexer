@@ -41,7 +41,7 @@ use frame_support::log::error;
 use jsonrpsee::types::error::CallError;
 use jsonrpsee::types::SubscriptionEmptyError;
 use tokio::sync::Mutex;
-use crate::relaying::sub_client_pool::{INIT_RUNTIME, MtoMSubClientPool};
+use crate::relaying::sub_client_pool::{MtoMSubClientPool};
 
 pub type Hash = sp_core::H256;
 
@@ -175,6 +175,17 @@ pub trait MantaRelayApi {
     )]
     fn subscribe_storage(&self, keys: Option<Vec<StorageKey>>);
 
+    // New head subscription.
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L58
+    #[subscription(
+    name = "chain_subscribeNewHeads" => "chain_newHead",
+    aliases = ["subscribe_newHead", "chain_subscribeNewHead"],
+    unsubscribe = "chain_unsubscribeNewHeads",
+    unsubscribe_aliases = ["unsubscribe_newHead", "chain_unsubscribeNewHead"],
+    item = Header
+    )]
+    fn subscribe_new_heads(&self);
+
     #[subscription(name = "sub" => "subNotif", unsubscribe = "unsub", item = String)]
     fn sub_override_notif_method(&self);
 
@@ -287,26 +298,25 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(methods)
     }
 
-    fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        let client = self.dmc.clone();
-        tokio::spawn(async move {
-            match client
-                .request::<sp_version::RuntimeVersion>("state_getRuntimeVersion", None)
-                .await
-            {
-                Ok(version) => sink
-                    .send(&version)
-                    .map_err(|e| JsonRpseeError::Custom(e.to_string())),
-                Err(e) => Err(e),
-            }
-        });
-
-        Ok(())
-    }
+    // fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+    //     let client = self.dmc.clone();
+    //     tokio::spawn(async move {
+    //         match client
+    //             .request::<sp_version::RuntimeVersion>("state_getRuntimeVersion", None)
+    //             .await
+    //         {
+    //             Ok(version) => sink
+    //                 .send(&version)
+    //                 .map_err(|e| JsonRpseeError::Custom(e.to_string())),
+    //             Err(e) => Err(e),
+    //         }
+    //     });
+    //
+    //     Ok(())
+    // }
 
     /// subscription methods.
     /// Subscription methods must not be `async`
-
     fn subscribe_storage(
         &self,
         mut sink: SubscriptionSink,
@@ -315,9 +325,16 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(sink, "state_subscribeStorage", rpc_params!([keys]), "state_unsubscribeStorage")?)
     }
 
+    fn subscribe_new_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeNewHeads", None, "chain_unsubscribeNewHeads")?)
+    }
+
+    fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        Ok(self.sub_clients.subscribe::<sp_version::RuntimeVersion>(sink, "state_subscribeRuntimeVersion", None, "state_unsubscribeRuntimeVersion")?)
+    }
+
     async fn system_health(&self) -> RpcResult<Health> {
         let health = self.dmc.request::<Health>("system_health", None).await?;
-
         Ok(health)
     }
 

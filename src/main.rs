@@ -30,7 +30,8 @@ mod relaying;
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<()> {
     // initialize logger
-    utils::init_logger();
+    // utils::init_logger();
+    log4rs::init_file("conf/log.yaml", Default::default())?;
 
     relay_server::start_relayer_server().await?;
     futures::future::pending().await

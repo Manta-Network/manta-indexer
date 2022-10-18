@@ -9,30 +9,13 @@ use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use once_cell::sync::Lazy;
 use serde::de::DeserializeOwned;
 use async_trait::async_trait;
-use frame_support::log::error;
+use frame_support::log::{error, trace};
 use futures::{FutureExt, TryFutureExt, TryStreamExt, StreamExt};
 use jsonrpsee::async_client::Client;
 use jsonrpsee::{rpc_params, SubscriptionSink};
 use jsonrpsee::core::error::SubscriptionClosed;
 use serde::Serialize;
 
-
-/// This runtime pool is distinguished with main env, and used for some hacky need.
-/// The most important reason:
-///     we need to call some async init function in sync semantic env.
-///     As a relaying part, we will build new resource when some request comes,
-///     and we support some sync methods like sync call and subscription,
-///     and those resource initialization is async function, so there's a hack.
-///     We can't just call it here because the async runtime doesn't allow a sync way.
-///     So we create a new tiny runtime to call a `block_on` method to act as a sync.
-pub(crate) static INIT_RUNTIME: Lazy<tokio::runtime::Runtime> = Lazy::new(|| {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("relay-init-pool")
-        .worker_threads(2)
-        .build()
-        .unwrap()
-});
 
 /// Here's version 1 subscription indexer relaying client.
 /// It manage subscription with a M to M mapping. each new subscription **from a single Dapp connection**
@@ -52,11 +35,21 @@ impl MtoMSubClientPool {
         let client;
         if !self.clients.contains_key(&key.conn_id) {
             let uri = self.backend_uri.as_str();
-            match INIT_RUNTIME.block_on(WsClientBuilder::default().build(uri)) {
-                Ok(cli) => client = Arc::new(cli),
-                Err(e) => bail!("MtoM client creation fail {:?}", e)
-            }
+            println!("{}", uri);
+
+            client = futures::executor::block_on(async move {
+                println!("kkk {}", uri);
+                match WsClientBuilder::default().build(uri).await {
+                    Ok(client) => {
+                        println!("kkqq {}", uri);
+                        return Ok(Arc::new(client));
+                    }
+                    Err(e) => bail!("MtoM client creation fail {:?}", e)
+                }
+            })?;
+            println!("client finished {}", uri);
             self.clients.insert(key.conn_id, client.clone());
+            trace!("MtoM get a new connection with key: {:?}, now size: {}", key, self.clients.len())
         } else {
             client = self.clients.get(&key.conn_id).unwrap().clone();
         }
@@ -74,16 +67,17 @@ impl MtoMSubClientPool {
     ///     * `N`: received subscription data type.
     pub fn subscribe<'a, N>(&self, mut sink: SubscriptionSink, sub_method: &'a str, params: Option<ParamsSer<'a>>, unsub_method: &'a str) -> anyhow::Result<()> where
         N: DeserializeOwned + Serialize + Send + 'static {
+        // we need firstly accept the subscription from upstream, then we can get the sub_keys.
+        let _ = sink.accept();
         let key = sink.sub_keys().ok_or_else(|| {
             error!("{} get a subscription error, call before accept", sink.method_name());
             anyhow!("")
         })?;
         let client = self.get_client(key)?;
-
-        // here means downstream subscription has been built successfully.
-        let sub_channel = INIT_RUNTIME.block_on(async move {
+        let sub_channel = futures::executor::block_on(async move {
             client.subscribe::<N>(sub_method, params, unsub_method).await
         })?;
+        // here means downstream subscription has been built successfully.
         let sub_channel = sub_channel.filter_map(|msg| async {
             match msg {
                 Ok(m) => Some(m),

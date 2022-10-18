@@ -39,13 +39,13 @@ impl WsMiddleware for IndexerMiddleware {
 
     // This function happens *after* the actual method calling.
     fn on_result(&self, name: &str, success: bool, started_at: Self::Instant) {
-        trace!("[on_call] a ws call is finished, name = {}, success = {}, time = {:?} ms", name, success, started_at.elapsed().as_millis());
+        trace!("[on_result] a ws call is finished, name = {}, success = {}, time = {:?} ms", name, success, started_at.elapsed().as_millis());
     }
 
     // This function happens *before* the actual sending happens.
     // It's more like a starting signal of response.
     fn on_response(&self, result: &str, started_at: Self::Instant) {
-        trace!("[on_call] a ws call is response, reply = {}, time = {:?} ms", result, started_at.elapsed().as_millis());
+        trace!("[on_response] a ws call is response, reply = {}, time = {:?} ms", result, started_at.elapsed().as_millis());
     }
 
     fn on_disconnect(&self, remote_addr: SocketAddr) {

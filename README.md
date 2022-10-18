@@ -1,6 +1,5 @@
 # manta-indexer
 
-
 ## Relaying part
 
 use jsonrpsee framework, and it's organized by method name.
@@ -20,7 +19,7 @@ we will rewrite all rpc api that subx contains.
 + [ ] state_queryStorage
 + [x] state_queryStorageAt
 + [ ] state_getReadProof
-+ [ ] state_subscribeStorage
++ [x] state_subscribeStorage
 + [ ] state_traceBlock
 
 *[System API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L33)*
@@ -49,9 +48,8 @@ we will rewrite all rpc api that subx contains.
 + [ ] chain_getBlockHash
 + [ ] chain_getFinalizedHead
 + [ ] chain_subscribeAllHeads
-+ [ ] chain_subscribeNewHeads
++ [x] chain_subscribeNewHeads
 + [ ] chain_subscribeFinalizedHeads
-
 
 *[Author API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L30)*
 
