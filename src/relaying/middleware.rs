@@ -17,7 +17,7 @@ impl WsMiddleware for IndexerMiddleware {
 
     fn on_connect(&self, remote_addr: SocketAddr, headers: &Headers) {
         let cn = self.conn_num.fetch_add(1, Ordering::SeqCst);
-        debug!("[on_connect] remote_addr: {}, headers: {:?}, conn_num = {}", remote_addr, headers, cn);
+        debug!("[on_connect] remote_addr: {}, headers: {:?}, conn_num = {}", remote_addr, headers, cn + 1);
     }
 
     fn on_request(&self) -> Self::Instant {
@@ -49,6 +49,6 @@ impl WsMiddleware for IndexerMiddleware {
 
     fn on_disconnect(&self, remote_addr: SocketAddr) {
         let cn = self.conn_num.fetch_sub(1, Ordering::SeqCst);
-        debug!("[on_disconnect] a remote_addr: {} disconnect, now conn = {}", remote_addr, cn);
+        debug!("[on_disconnect] a remote_addr: {} disconnect, now conn = {}", remote_addr, cn - 1);
     }
 }
