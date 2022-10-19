@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use frame_support::log;
 use frame_support::log::{debug, error, trace};
 use jsonrpsee::core::middleware::{Headers, MethodKind, WsMiddleware};
 use jsonrpsee::types::Params;

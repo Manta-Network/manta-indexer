@@ -16,31 +16,23 @@
 
 use crate::logger::RelayerLogger;
 use crate::types::{Health, RpcMethods};
-use anyhow::{anyhow, Result};
-use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
+use anyhow::{Result};
+use jsonrpsee::core::client::{ClientT, SubscriptionClientT};
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 use jsonrpsee::{
-    core::{async_trait, Error as JsonRpseeError, RpcResult},
+    core::{async_trait, RpcResult},
     proc_macros::rpc,
     rpc_params,
-    types::{EmptyParams, SubscriptionResult},
+    types::{SubscriptionResult},
     SubscriptionSink,
 };
-use manta_pay::signer::{Checkpoint as _, RawCheckpoint};
-use rusqlite::{Connection, Params};
 use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
 use std::net::SocketAddr;
-use std::ops::Sub;
 use std::sync::Arc;
-use std::time::Duration;
-use frame_support::log::error;
-use jsonrpsee::types::error::CallError;
-use jsonrpsee::types::SubscriptionEmptyError;
-use tokio::sync::Mutex;
 use crate::relaying::sub_client_pool::{MtoMSubClientPool};
 
 pub type Hash = sp_core::H256;
@@ -316,7 +308,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     // }
 
     /// subscription methods.
-    /// Subscription methods must not be `async`
+    /// Subscription methods must not be `async`, this is ruled in marco generation.
     fn subscribe_storage(
         &self,
         mut sink: SubscriptionSink,
@@ -386,10 +378,7 @@ pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
     let relayer = MantaRpcRelayServer {
         backend_uri: full_node.to_string(),
         dmc: Arc::new(client),
-        sub_clients: Arc::new(MtoMSubClientPool {
-            backend_uri: full_node.to_string(),
-            clients: Default::default(),
-        }),
+        sub_clients: Arc::new(MtoMSubClientPool::new(full_node.to_string())),
     };
 
     let addr = server.local_addr()?;

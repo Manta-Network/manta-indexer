@@ -16,18 +16,16 @@
 
 use crate::constants::*;
 use crate::types::{EncryptedNote, PullResponse, Utxo};
-use crate::utils;
 use anyhow::Result;
 use frame_support::storage::storage_prefix;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
-use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+use jsonrpsee::ws_client::{WsClient};
 use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::config::MerkleTreeConfiguration;
 use manta_pay::signer::Checkpoint;
 use sp_core::storage::StorageData;
 use std::collections::HashMap;
-use tokio_stream::StreamExt;
 
 pub async fn synchronize_shards(ws: &WsClient) -> Result<PullResponse> {
     let mut checkpoint = Checkpoint::default();

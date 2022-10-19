@@ -1,31 +1,34 @@
+use std::future::Future;
 use std::sync::Arc;
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow};
 use dashmap::DashMap;
-use jsonrpsee::core::client::{ClientT, Subscription, SubscriptionClientT};
-use jsonrpsee::core::Error;
+use jsonrpsee::core::client::{SubscriptionClientT};
 use jsonrpsee::core::server::rpc_module::{ConnectionId, SubscriptionKey};
 use jsonrpsee::types::{ErrorObjectOwned, ParamsSer};
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use once_cell::sync::Lazy;
 use serde::de::DeserializeOwned;
-use async_trait::async_trait;
 use frame_support::log::{error, trace};
-use futures::{FutureExt, TryFutureExt, TryStreamExt, StreamExt};
+use futures::{StreamExt};
+use futures::future::BoxFuture;
 use jsonrpsee::async_client::Client;
-use jsonrpsee::{rpc_params, SubscriptionSink};
+use jsonrpsee::{SubscriptionSink};
 use jsonrpsee::core::error::SubscriptionClosed;
 use serde::Serialize;
 
+type OnceJob = Arc<dyn Send + Sync + Fn() -> std::pin::Pin<Box<dyn Future<Output=()>>>>;
 
 /// Here's version 1 subscription indexer relaying client.
 /// It manage subscription with a M to M mapping. each new subscription **from a single Dapp connection**
 /// will go with a new connection to backend full node.
-#[derive(Default)]
 pub struct MtoMSubClientPool {
     // full_node connecting uri.
-    pub backend_uri: String,
+    backend_uri: String,
     // all managed ws client, each ConnId use one connection with multiplexing subscription.
-    pub clients: DashMap<ConnectionId, Arc<WsClient>>,
+    clients: DashMap<ConnectionId, Arc<WsClient>>,
+    // as a relay layer, we need to spawn a new thread with a single tiny tokio runtime
+    // to run some initialization work, use this channel to send a task that will executed.
+    // generally speaking, this tricky is to deal case: call a async fn in a sync fn in a async tokio runtime env.
+    async_runner_sender: futures::channel::mpsc::Sender<OnceJob>,
 }
 
 
@@ -34,20 +37,23 @@ impl MtoMSubClientPool {
     fn get_client(&self, key: SubscriptionKey) -> anyhow::Result<Arc<Client>> {
         let client;
         if !self.clients.contains_key(&key.conn_id) {
-            let uri = self.backend_uri.as_str();
-            println!("{}", uri);
-
-            client = futures::executor::block_on(async move {
-                println!("kkk {}", uri);
-                match WsClientBuilder::default().build(uri).await {
-                    Ok(client) => {
-                        println!("kkqq {}", uri);
-                        return Ok(Arc::new(client));
-                    }
-                    Err(e) => bail!("MtoM client creation fail {:?}", e)
-                }
-            })?;
-            println!("client finished {}", uri);
+            let uri = self.backend_uri.clone();
+            let (tx, rx) = crossbeam::channel::bounded(1);
+            self.async_runner_sender.clone().try_send(Arc::new(move || {
+                let uri = uri.clone();
+                let tx = tx.clone();
+                let f = async move {
+                    let _ = match WsClientBuilder::default().build(uri).await {
+                        Ok(client) => {
+                            println!("kk2");
+                            tx.send(Ok(Arc::new(client)))
+                        }
+                        Err(e) => tx.send(Err(anyhow!("MtoM client creation fail: {:?}", e)))
+                    };
+                };
+                Box::pin(f)
+            }))?;
+            client = rx.recv()??;
             self.clients.insert(key.conn_id, client.clone());
             trace!("MtoM get a new connection with key: {:?}, now size: {}", key, self.clients.len())
         } else {
@@ -65,7 +71,7 @@ impl MtoMSubClientPool {
     ///     * `unsub_method`: unsubscription method name.
     /// Template:
     ///     * `N`: received subscription data type.
-    pub fn subscribe<'a, N>(&self, mut sink: SubscriptionSink, sub_method: &'a str, params: Option<ParamsSer<'a>>, unsub_method: &'a str) -> anyhow::Result<()> where
+    pub fn subscribe<N>(&self, mut sink: SubscriptionSink, sub_method: &'static str, params: Option<ParamsSer<'static>>, unsub_method: &'static str) -> anyhow::Result<()> where
         N: DeserializeOwned + Serialize + Send + 'static {
         // we need firstly accept the subscription from upstream, then we can get the sub_keys.
         let _ = sink.accept();
@@ -74,9 +80,23 @@ impl MtoMSubClientPool {
             anyhow!("")
         })?;
         let client = self.get_client(key)?;
-        let sub_channel = futures::executor::block_on(async move {
-            client.subscribe::<N>(sub_method, params, unsub_method).await
-        })?;
+        let (tx, rx) = crossbeam::channel::bounded(1);
+        self.async_runner_sender.clone().try_send(Arc::new(move || {
+            let client = client.clone();
+            let tx = tx.clone();
+            let params = params.clone();
+            let f = async move {
+                let _ = match client.subscribe::<N>(sub_method, params, unsub_method).await {
+                    Ok(sub) => {
+                        tx.send(Ok(sub))
+                    }
+                    Err(e) => tx.send(Err(anyhow!("new client subscribe fail: {:?}", e)))
+                };
+            };
+            Box::pin(f)
+        }))?;
+
+        let sub_channel = rx.recv()??;
         // here means downstream subscription has been built successfully.
         let sub_channel = sub_channel.filter_map(|msg| async {
             match msg {
@@ -97,6 +117,27 @@ impl MtoMSubClientPool {
             }
         });
         Ok(())
+    }
+
+
+    pub fn new(backend_uri: String) -> Self {
+        let (tx, mut rx) = futures::channel::mpsc::channel::<OnceJob>(64);
+        // start a new inner work thread dealing with some closure job.
+        std::thread::Builder::new().name(
+            "MtoM_initial_worker".to_string()
+        ).spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            runtime.block_on(async move {
+                while let Some(job) = rx.next().await {
+                    job().await;
+                }
+            });
+        }).unwrap();
+        Self {
+            backend_uri,
+            clients: Default::default(),
+            async_runner_sender: tx,
+        }
     }
 }
 

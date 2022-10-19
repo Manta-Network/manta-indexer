@@ -21,8 +21,7 @@ use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::{Checkpoint as _, RawCheckpoint};
-use rusqlite::{Connection, Params};
+use rusqlite::{Connection};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
