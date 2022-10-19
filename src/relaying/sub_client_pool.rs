@@ -45,7 +45,6 @@ impl MtoMSubClientPool {
                 let f = async move {
                     let _ = match WsClientBuilder::default().build(uri).await {
                         Ok(client) => {
-                            println!("kk2");
                             tx.send(Ok(Arc::new(client)))
                         }
                         Err(e) => tx.send(Err(anyhow!("MtoM client creation fail: {:?}", e)))
