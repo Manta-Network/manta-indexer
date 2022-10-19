@@ -33,6 +33,7 @@ use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use crate::relaying::middleware::IndexerMiddleware;
 use crate::relaying::sub_client_pool::{MtoMSubClientPool};
 
 pub type Hash = sp_core::H256;
@@ -367,7 +368,7 @@ pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
         // .max_response_body_size(10)
         // .ping_interval(Duration::from_secs(60))
         // .max_subscriptions_per_connection(1024)
-        .set_middleware(RelayerLogger)
+        .set_middleware(IndexerMiddleware::default())
         .build("127.0.0.1:9988")
         .await?;
 
