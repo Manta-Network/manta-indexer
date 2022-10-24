@@ -31,6 +31,7 @@ use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
+// use sc_rpc_api::state::ReadProof;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use crate::relaying::middleware::IndexerMiddleware;
@@ -84,20 +85,6 @@ pub trait MantaRelayApi {
 
     /// async fn declaration.
 
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L78
-    // NOTE: origin has a generic `hash` param but not sure the usage, just ignore to forbidden parse error.
-    // trait bounds: https://github.com/paritytech/substrate/blob/master/utils/frame/rpc/support/src/lib.rs#L181
-    #[method(name = "state_getMetadata")]
-    async fn metadata(&self) -> RpcResult<Bytes>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L99
-    #[method(name = "state_queryStorageAt")]
-    async fn query_storage_at(
-        &self,
-        keys: Vec<StorageKey>,
-        at: Option<Hash>,
-    ) -> RpcResult<Vec<StorageChangeSet<Hash>>>;
-
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L37
     #[method(name = "state_call", aliases = ["state_callAt"])]
     async fn call(&self, name: String, bytes: Bytes, hash: Option<Hash>) -> RpcResult<Bytes>;
@@ -120,17 +107,71 @@ pub trait MantaRelayApi {
         hash: Option<Hash>,
     ) -> RpcResult<Vec<StorageKey>>;
 
-    #[method(name = "chain_getBlockHash", aliases = ["chain_getHead"])]
-    async fn block_hash(
-        &self,
-        hash: Option<ListOrValue<NumberOrHex>>,
-    ) -> RpcResult<ListOrValue<Option<Hash>>>;
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L65
+    #[method(name = "state_getStorage", aliases = ["state_getStorageAt"])]
+    async fn storage(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<StorageData>>;
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L69
+    #[method(name = "state_getStorageHash", aliases = ["state_getStorageHashAt"])]
+    async fn storage_hash(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<Hash>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L73
+    #[method(name = "state_getStorageSize", aliases = ["state_getStorageSizeAt"])]
+    async fn storage_size(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<u64>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L78
+    #[method(name = "state_getMetadata")]
+    async fn metadata(&self, hash: Option<Hash>) -> RpcResult<Bytes>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L81
     #[method(name = "state_getRuntimeVersion", aliases = ["chain_getRuntimeVersion"])]
     async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion>;
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L85
+    #[method(name = "state_queryStorage")]
+    async fn query_storage(
+        &self,
+        keys: Vec<StorageKey>,
+        block: Hash,
+        hash: Option<Hash>,
+    ) -> RpcResult<Vec<StorageChangeSet<Hash>>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L99
+    #[method(name = "state_queryStorageAt")]
+    async fn query_storage_at(
+        &self,
+        keys: Vec<StorageKey>,
+        at: Option<Hash>,
+    ) -> RpcResult<Vec<StorageChangeSet<Hash>>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L106
+    // #[method(name = "state_getReadProof")]
+    // async fn read_proof(&self, keys: Vec<StorageKey>, hash: Option<Hash>) -> RpcResult<ReadProof<Hash>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L280
+    #[method(name = "state_traceBlock")]
+    async fn trace_block(
+        &self,
+        block: Hash,
+        targets: Option<String>,
+        storage_keys: Option<String>,
+        methods: Option<String>,
+    ) -> RpcResult<sp_rpc::tracing::TraceBlockResponse>;
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L34
+    #[method(name = "system_name")]
+    async fn system_name(&self) -> RpcResult<String>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L38
+    #[method(name = "system_version")]
+    async fn system_version(&self) -> RpcResult<String>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L42
     #[method(name = "system_chain")]
     async fn system_chain(&self) -> RpcResult<String>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L46
+    // #[method(name = "system_chainType")]
+    // async fn system_type(&self) -> RpcResult<sc_chain_spec::ChainType>;
 
     #[method(name = "system_properties")]
     async fn system_properties(&self) -> RpcResult<Properties>;
@@ -149,6 +190,12 @@ pub trait MantaRelayApi {
 
     #[method(name = "chain_getFinalizedHead", aliases = ["chain_getFinalisedHead"])]
     async fn finalized_head(&self) -> RpcResult<Hash>;
+
+    #[method(name = "chain_getBlockHash", aliases = ["chain_getHead"])]
+    async fn block_hash(
+        &self,
+        hash: Option<ListOrValue<NumberOrHex>>,
+    ) -> RpcResult<ListOrValue<Option<Hash>>>;
 
     /// subscription fn declaration.
     #[subscription(
@@ -192,17 +239,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
 
 
     /// directly async method
-    async fn metadata(&self) -> RpcResult<Bytes> {
-        Ok(self.dmc.request("state_getMetadata", None).await?)
-    }
-
-    async fn query_storage_at(
-        &self,
-        keys: Vec<StorageKey>,
-        at: Option<Hash>,
-    ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
-        Ok(self.dmc.request("state_queryStorageAt", rpc_params!(keys, at)).await?)
-    }
 
     async fn call(&self, name: String, bytes: Bytes, hash: Option<Hash>) -> RpcResult<Bytes> {
         Ok(self.dmc.request("state_call", rpc_params!(name, bytes, hash)).await?)
@@ -226,6 +262,68 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(self.dmc.request("state_getKeysPaged", rpc_params!(prefix, count, start_key, hash)).await?)
     }
 
+    async fn storage(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<StorageData>> {
+        Ok(self.dmc.request("state_getStorage", rpc_params!(key, hash)).await?)
+    }
+
+    async fn storage_hash(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<Hash>> {
+        Ok(self.dmc.request("state_getStorageHash", rpc_params!(key, hash)).await?)
+    }
+
+    async fn storage_size(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<u64>> {
+        Ok(self.dmc.request("state_getStorageSize", rpc_params!(key, hash)).await?)
+    }
+
+    async fn metadata(&self, hash: Option<Hash>) -> RpcResult<Bytes> {
+        Ok(self.dmc.request("state_getMetadata", None).await?)
+    }
+
+    async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {
+        Ok(self.dmc.request("state_getRuntimeVersion", rpc_params!(hash)).await?)
+    }
+
+    async fn query_storage(
+        &self,
+        keys: Vec<StorageKey>,
+        block: Hash,
+        hash: Option<Hash>,
+    ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
+        Ok(self.dmc.request("state_queryStorage", rpc_params!(keys, block, hash)).await?)
+    }
+
+    async fn query_storage_at(
+        &self,
+        keys: Vec<StorageKey>,
+        at: Option<Hash>,
+    ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
+        Ok(self.dmc.request("state_queryStorageAt", rpc_params!(keys, at)).await?)
+    }
+
+    // async fn read_proof(&self, keys: Vec<StorageKey>, hash: Option<Hash>) -> RpcResult<ReadProof<Hash>> {
+    //     Ok(self.dmc.request("state_getReadProof", rpc_params!(keys, hash)).await?)
+    // }
+
+    async fn trace_block(
+        &self,
+        block: Hash,
+        targets: Option<String>,
+        storage_keys: Option<String>,
+        methods: Option<String>,
+    ) -> RpcResult<sp_rpc::tracing::TraceBlockResponse> {
+        Ok(self.dmc.request("state_traceBlock", rpc_params!(block, targets, storage_keys, methods)).await?)
+    }
+
+    async fn system_name(&self) -> RpcResult<String> {
+        Ok(self.dmc.request::<String>("system_name", None).await?)
+    }
+
+    async fn system_version(&self) -> RpcResult<String> {
+        Ok(self.dmc.request::<String>("system_version", None).await?)
+    }
+
+    async fn system_chain(&self) -> RpcResult<String> {
+        Ok(self.dmc.request::<String>("system_chain", None).await?)
+    }
 
     // now
 
@@ -255,22 +353,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .await?;
 
         Ok(block)
-    }
-
-    async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {
-        let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
-        let rt_version = self
-            .dmc
-            .request::<sp_version::RuntimeVersion>("state_getRuntimeVersion", _hash)
-            .await?;
-
-        Ok(rt_version)
-    }
-
-    async fn system_chain(&self) -> RpcResult<String> {
-        let chain = self.dmc.request::<String>("system_chain", None).await?;
-
-        Ok(chain)
     }
 
     async fn system_properties(&self) -> RpcResult<Properties> {

@@ -11,23 +11,23 @@ we will rewrite all rpc api that subx contains.
 + [x] ~~state_getKeys(duplicated)~~
 + [x] state_getPairs
 + [x] state_getKeysPaged
-+ [ ] state_getStorage
-+ [ ] state_getStorageHash
-+ [ ] state_getStorageSize
++ [x] state_getStorage
++ [x] state_getStorageHash
++ [x] state_getStorageSize
 + [x] state_getMetadata
-+ [ ] state_getRuntimeVersion
-+ [ ] state_queryStorage
++ [x] state_getRuntimeVersion
++ [x] state_queryStorage
 + [x] state_queryStorageAt
-+ [ ] state_getReadProof
++ [ ] state_getReadProof(block by upstream compiling)
 + [x] state_subscribeStorage
-+ [ ] state_traceBlock
++ [x] state_traceBlock
 
 *[System API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L33)*
 
-+ [ ] system_name
-+ [ ] system_version
-+ [ ] system_chain
-+ [ ] system_chainType
++ [x] system_name
++ [x] system_version
++ [x] system_chain
++ [ ] system_chainType(block by upstream compiling)
 + [ ] system_properties
 + [ ] system_health
 + [ ] system_localPeerId
