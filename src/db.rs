@@ -20,7 +20,7 @@ use manta_pay::signer::Checkpoint;
 use sqlx::{
     migrate::Migrator,
     sqlite::{SqlitePool, SqlitePoolOptions},
-    Error as SqlxError,
+    Error as SqlxError, Row,
 };
 use std::{env, path::Path};
 use tokio_stream::StreamExt;
@@ -47,12 +47,12 @@ pub async fn initialize_db_pool() -> Result<SqlitePool> {
         .await?;
     m.run(&pool).await?;
 
-    sqlx::query!(r#"PRAGMA synchronous = OFF;"#)
+    sqlx::query(r#"PRAGMA synchronous = OFF;"#)
         .execute(&pool)
         .await?;
 
     // Enable WAL mode
-    sqlx::query!(r#"PRAGMA synchronous = OFF;"#)
+    sqlx::query(r#"PRAGMA synchronous = OFF;"#)
         .execute(&pool)
         .await?;
 
@@ -61,26 +61,24 @@ pub async fn initialize_db_pool() -> Result<SqlitePool> {
 
 #[cfg(test)]
 pub async fn initialize_db_pool_for_test(db_url: &str) -> Result<SqlitePool> {
-    // let m = Migrator::new(Path::new("./migrations")).await?;
+    let m = Migrator::new(Path::new("./migrations")).await?;
 
-    // todo, set a proper pool size
     let pool = SqlitePoolOptions::new()
         .max_lifetime(None)
         .idle_timeout(None)
         .max_connections(16)
         .connect(&db_url)
         .await?;
-    // let mut conn = pool.acquire().await?;
-    // m.run(&mut conn).await?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    let mut conn = pool.acquire().await?;
+    m.run(&mut conn).await?;
 
-    sqlx::query!(r#"PRAGMA synchronous = OFF;"#)
+    sqlx::query(r#"PRAGMA synchronous = OFF;"#)
         .execute(&pool)
         .await?;
 
     // Enable WAL mode
-    sqlx::query!(r#"PRAGMA synchronous = OFF;"#)
+    sqlx::query(r#"PRAGMA synchronous = OFF;"#)
         .execute(&pool)
         .await?;
 
@@ -90,11 +88,10 @@ pub async fn initialize_db_pool_for_test(db_url: &str) -> Result<SqlitePool> {
 /// Whether the shard exists in the db or not.
 pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> bool {
     let n = next_index as i64;
-    let one = sqlx::query!(
-        "SELECT shard_index, next_index FROM shards WHERE shard_index = ? and next_index = ?",
-        shard_index,
-        n
-    )
+
+    let one = sqlx::query("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+    .bind(shard_index)
+    .bind(n)
     .fetch_one(pool)
     .await;
 
@@ -112,16 +109,14 @@ pub async fn get_a_single_shard(
     next_index: u64,
 ) -> Result<Shard> {
     let n = next_index as i64;
-    let one_shard = sqlx::query_as_unchecked!(
-        Shard,
-        "SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ? and next_index = ?",
-        shard_index,
-        n
-    )
-    .fetch_one(pool)
-    .await;
 
-    one_shard.map_err(From::from)
+    let one = sqlx::query_as("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+        .bind(shard_index)
+        .bind(n)
+        .fetch_one(pool)
+        .await;
+
+    one.map_err(From::from)
 }
 
 /// Get a batched shard from db.
@@ -134,14 +129,12 @@ pub async fn get_batched_shards(
 ) -> Result<Vec<Shard>> {
     let from = from_next_index as i64;
     let to = to_next_index as i64;
-    let batched_shard = sqlx::query_as_unchecked!(
-        Shard,
-        "SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ? and next_index BETWEEN ? and ?",
-        shard_index,
-        from, to
-    )
-    .fetch_all(pool)
-    .await;
+
+    let batched_shard = sqlx::query_as("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+        .bind(from)
+        .bind(to)
+        .fetch_all(pool)
+        .await;
 
     batched_shard.map_err(From::from)
 }
@@ -155,14 +148,14 @@ pub async fn insert_a_single_shard(
     let n = next_index as i64;
 
     let mut conn = pool.acquire().await?;
-    let row_at = sqlx::query!(
-        "INSERT INTO shards (shard_index, next_index, utxo) VALUES (?, ?, ?)",
-        shard_index,
-        n,
-        encoded_utxo
-    )
-    .execute(&mut conn)
-    .await?;
+
+    let row_at =
+        sqlx::query("INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3);")
+            .bind(shard_index)
+            .bind(n)
+            .bind(encoded_utxo)
+            .execute(&mut conn)
+            .await?;
 
     Ok(())
 }
@@ -172,30 +165,24 @@ pub async fn insert_a_single_void_number(
     vn_index: u64,
     encoded_vn: Vec<u8>,
 ) -> Result<()> {
-    todo!();
-    // let n = vn_index as i64;
+    let n = vn_index as i64;
 
-    // let mut conn = pool.acquire().await?;
-    // let row_at = sqlx::query!(
-    //     "INSERT INTO void_number (idx, vn) VALUES (?, ?)",
-    //     n,
-    //     encoded_vn
-    // )
-    // .execute(&mut conn)
-    // .await;
+    let mut conn = pool.acquire().await?;
+    let row_at = sqlx::query("INSERT INTO void_number (idx, vn) VALUES (?1, ?2)")
+        .bind(n)
+        .bind(encoded_vn)
+        .execute(&mut conn)
+        .await;
 
-    // Ok(())
+    Ok(())
 }
 
 pub async fn get_len_of_void_number(pool: &SqlitePool) -> Result<usize> {
-    todo!();
-    // let vns = sqlx::query!(
-    //     r#"SELECT vn FROM void_number;"#
-    // )
-    // .execute(&mut conn)
-    // .await;
+    let vns = sqlx::query(r#"SELECT vn FROM void_number;"#)
+        .fetch_all(pool)
+        .await?;
 
-    // vns.map(|v| v.len())
+    Ok(vns.len())
 }
 
 pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
@@ -204,12 +191,12 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
     let mut stream = tokio_stream::iter(0..=255u8);
     // If there's no any shard in db, return default checkpoint.
     while let Some(shard_index) = stream.next().await {
-        let batched_shard = sqlx::query!(
-            "SELECT shard_index FROM shards WHERE shard_index = ?;",
-            shard_index,
-        )
-        .fetch_all(pool)
-        .await?;
+        let batched_shard: Vec<Shard> =
+            sqlx::query_as("SELECT shard_index FROM shards WHERE shard_index = ?1;")
+                .bind(shard_index)
+                .fetch_all(pool)
+                .await?;
+
         ckp.receiver_index[shard_index as usize] = batched_shard.len();
     }
     ckp.sender_index = ckp.receiver_index.iter().sum();
@@ -220,7 +207,8 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
 /// Whether the void number exists in the db or not.
 pub async fn has_void_number(pool: &SqlitePool, vn_index: u64) -> bool {
     let n = vn_index as i64;
-    let one = sqlx::query!("SELECT vn FROM void_number WHERE idx = ?;", n)
+    let one = sqlx::query("SELECT vn FROM void_number WHERE idx = ?1;")
+        .bind(n)
         .fetch_one(pool)
         .await;
 
@@ -233,11 +221,13 @@ pub async fn has_void_number(pool: &SqlitePool, vn_index: u64) -> bool {
 
 pub async fn get_one_void_number(pool: &SqlitePool, vn_index: u64) -> Result<VoidNumber> {
     let n = vn_index as i64;
-    let one = sqlx::query_as_unchecked!(VoidNumber, "SELECT vn FROM void_number WHERE idx = ?;", n)
+    let one_row = sqlx::query("SELECT vn FROM void_number WHERE idx = ?1;")
+        .bind(n)
         .fetch_one(pool)
-        .await;
+        .await?;
+    let one: VoidNumber = one_row.get::<Vec<u8>, _>("vn").try_into().unwrap();
 
-    one.map_err(From::from)
+    Ok(one)
 }
 
 pub async fn get_batched_void_number(
@@ -247,22 +237,35 @@ pub async fn get_batched_void_number(
 ) -> Result<SenderChunk> {
     let from = from_vn_index as i64;
     let to = to_vn_index as i64;
-    let batched_vns = sqlx::query_as_unchecked!(
-        VoidNumber,
-        "SELECT vn FROM void_number WHERE idx BETWEEN ? and ?;",
-        from,
-        to
-    )
-    .fetch_all(pool)
-    .await;
+    let batched_vns = sqlx::query("SELECT vn FROM void_number WHERE idx BETWEEN ?1 and ?2;")
+        .bind(from)
+        .bind(to)
+        .fetch_all(pool)
+        .await?;
+    let mut vns = Vec::with_capacity(batched_vns.len());
+    for i in &batched_vns {
+        let vn: VoidNumber = i.get::<Vec<u8>, _>("vn").try_into().unwrap();
+        vns.push(vn)
+    }
 
-    batched_vns.map_err(From::from)
+    Ok(vns)
+}
+
+#[cfg(test)]
+async fn clean_up(conn: &mut SqlitePool, table_name: &str) -> Result<()> {
+    use sqlx::Executor;
+
+    let going_to_drop = format!("DROP TABLE {}", table_name);
+    conn.execute(&*going_to_drop).await.ok();
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::Shard;
+    use codec::Encode;
     use sqlx::migrate::MigrateDatabase;
 
     #[tokio::test]
@@ -330,36 +333,44 @@ mod tests {
 
     #[tokio::test]
     async fn insert_a_single_shard_should_work() {
-        // let tmp_db = tempfile::Builder::new()
-        //     .prefix("sqlite:dolphin-tmp-shards")
-        //     .suffix(&".db")
-        //     .tempfile()
-        //     .unwrap();
-        // let db_url = tmp_db.path().to_str().unwrap();
-        let db_url = "dolphin-tmp-shards.db";
+        let tmp_db = tempfile::Builder::new()
+            // .prefix("sqlite:dolphin-tmp-shards")
+            .prefix("dolphin-tmp-shards")
+            .suffix(&".db")
+            .tempfile()
+            .unwrap();
+        let db_url = tmp_db.path().to_str().unwrap();
         if let Ok(true) = sqlx::sqlite::Sqlite::database_exists(&db_url).await {
             ();
         } else {
+            sqlx::sqlite::CREATE_DB_WAL.store(true, std::sync::atomic::Ordering::Release);
             assert!(sqlx::sqlite::Sqlite::create_database(db_url).await.is_ok());
         }
 
         let pool = initialize_db_pool_for_test(db_url).await;
-        let pool = pool.unwrap();
         // assert!(pool.is_ok());
+        let mut pool = pool.unwrap();
 
         let utxo = vec![1u8, 132];
         let shard_index = 0u8;
         let next_index = 0u64;
         assert!(
-            insert_a_single_void_number(&pool, shard_index, next_index, utxo)
+            insert_a_single_shard(&pool, shard_index, next_index, utxo.clone())
                 .await
                 .is_ok()
         );
 
         let shard = get_a_single_shard(&pool, shard_index, next_index).await;
-        // assert!(shard.is_ok());
+        assert!(shard.is_ok());
 
+        let shard = Shard {
+            shard_index,
+            next_index: next_index as i64,
+            utxo: utxo.encode(),
+        };
         dbg!(&shard);
+
+        assert!(clean_up(&mut pool, "shards").await.is_ok());
     }
 
     #[tokio::test]

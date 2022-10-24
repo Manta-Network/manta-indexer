@@ -96,14 +96,17 @@ pub async fn sync_shards_from_full_node(pool: &SqlitePool, max_count: (u32, u32)
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
             for (next_index, sh) in shard.iter().enumerate() {
-                let encoded_utxo = sh.encode();
-                crate::db::insert_a_single_shard(
-                    pool,
-                    *shard_index,
-                    next_index as u64,
-                    encoded_utxo,
-                )
-                .await?;
+                // if the shard doesn't exist in db, insert it.
+                if !crate::db::has_shard(pool, *shard_index, next_index as u64).await {
+                    let encoded_utxo = sh.encode();
+                    crate::db::insert_a_single_shard(
+                        pool,
+                        *shard_index,
+                        next_index as u64,
+                        encoded_utxo,
+                    )
+                    .await?;
+                }
             }
         }
 

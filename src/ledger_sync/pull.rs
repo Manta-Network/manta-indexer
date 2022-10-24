@@ -132,12 +132,12 @@ pub async fn pull_ledger_diff(
     let (more_receivers, receivers) =
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
     let (more_senders, senders) = pull_senders(pool, checkpoint.sender_index, max_senders).await?;
-    let senders_receivers_total = sqlx::query!(
-        i64
-        "SELECT total FROM senders_receivers_total;",
-    )
-    .fetch_one(pool)
-    .await?;
+    // let senders_receivers_total = sqlx::query!(
+    //     "SELECT total FROM senders_receivers_total;",
+    // )
+    // .fetch_one(pool)
+    // .await?;
+    let senders_receivers_total = 0;
 
     Ok(PullResponse {
         should_continue: more_receivers,
