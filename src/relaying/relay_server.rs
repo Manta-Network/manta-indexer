@@ -173,31 +173,88 @@ pub trait MantaRelayApi {
     // #[method(name = "system_chainType")]
     // async fn system_type(&self) -> RpcResult<sc_chain_spec::ChainType>;
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L50
     #[method(name = "system_properties")]
     async fn system_properties(&self) -> RpcResult<Properties>;
 
-    #[method(name = "rpc_methods")]
-    async fn rpc_methods(&self) -> RpcResult<RpcMethods>;
-
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L56
     #[method(name = "system_health")]
     async fn system_health(&self) -> RpcResult<Health>;
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L62
+    #[method(name = "system_localPeerId")]
+    async fn system_local_peer_id(&self) -> RpcResult<String>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L66
+    #[method(name = "system_localListenAddresses")]
+    async fn system_local_listen_addresses(&self) -> RpcResult<Vec<String>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L86
+    #[method(name = "system_addReservedPeer")]
+    async fn system_add_reserved_peer(&self, peer: String) -> RpcResult<()>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L94
+    #[method(name = "system_removeReservedPeer")]
+    async fn system_remove_reserved_peer(&self, peer_id: String) -> RpcResult<()>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L99
+    #[method(name = "system_reservedPeers")]
+    async fn system_reserved_peers(&self) -> RpcResult<Vec<String>>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L112
+    #[method(name = "system_addLogFilter")]
+    async fn system_add_log_filter(&self, directives: String) -> RpcResult<()>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L120
+    #[method(name = "system_resetLogFilter")]
+    async fn system_reset_log_filter(&self) -> RpcResult<()>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L28
     #[method(name = "chain_getHeader")]
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>>;
 
-    #[method(name = "author_submitExtrinsic")]
-    async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash>;
-
-    #[method(name = "chain_getFinalizedHead", aliases = ["chain_getFinalisedHead"])]
-    async fn finalized_head(&self) -> RpcResult<Hash>;
-
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L36
     #[method(name = "chain_getBlockHash", aliases = ["chain_getHead"])]
     async fn block_hash(
         &self,
         hash: Option<ListOrValue<NumberOrHex>>,
     ) -> RpcResult<ListOrValue<Option<Hash>>>;
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L45
+    #[method(name = "chain_getFinalizedHead", aliases = ["chain_getFinalisedHead"])]
+    async fn finalized_head(&self) -> RpcResult<Hash>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L31
+    #[method(name = "author_submitExtrinsic")]
+    async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L35
+    #[method(name = "author_insertKey")]
+    async fn insert_key(&self, key_type: String, suri: String, public: Bytes) -> RpcResult<()>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L39
+    #[method(name = "author_rotateKeys")]
+    async fn rotate_keys(&self) -> RpcResult<Bytes>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L43
+    #[method(name = "author_hasSessionKeys")]
+    async fn has_session_keys(&self, session_keys: Bytes) -> RpcResult<bool>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L51
+    #[method(name = "author_hasKey")]
+    async fn has_key(&self, public_key: Bytes, key_type: String) -> RpcResult<bool>;
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L57
+    #[method(name = "author_pendingExtrinsics")]
+    async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>>;
+
+    // attached by framework.
+    #[method(name = "rpc_methods")]
+    async fn rpc_methods(&self) -> RpcResult<RpcMethods>;
+
     /// subscription fn declaration.
+
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L110
     #[subscription(
     name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
     unsubscribe = "state_unsubscribeRuntimeVersion",
@@ -215,6 +272,14 @@ pub trait MantaRelayApi {
     )]
     fn subscribe_storage(&self, keys: Option<Vec<StorageKey>>);
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L49
+    #[subscription(
+    name = "chain_subscribeAllHeads" => "chain_allHead",
+    unsubscribe = "chain_unsubscribeAllHeads",
+    item = Header
+    )]
+    fn subscribe_all_heads(&self);
+
     // New head subscription.
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L58
     #[subscription(
@@ -226,9 +291,21 @@ pub trait MantaRelayApi {
     )]
     fn subscribe_new_heads(&self);
 
+    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L67
+    #[subscription(
+    name = "chain_subscribeFinalizedHeads" => "chain_finalizedHead",
+    aliases = ["chain_subscribeFinalisedHeads"],
+    unsubscribe = "chain_unsubscribeFinalizedHeads",
+    unsubscribe_aliases = ["chain_unsubscribeFinalisedHeads"],
+    item = Header
+    )]
+    fn subscribe_finalized_heads(&self);
+
+    // a test debug subscription
     #[subscription(name = "sub" => "subNotif", unsubscribe = "unsub", item = String)]
     fn sub_override_notif_method(&self);
 
+    // a test debug method
     #[subscription(name = "subscribe", item = String)]
     fn sub(&self);
 }
@@ -314,54 +391,90 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn system_name(&self) -> RpcResult<String> {
-        Ok(self.dmc.request::<String>("system_name", None).await?)
+        Ok(self.dmc.request("system_name", None).await?)
     }
 
     async fn system_version(&self) -> RpcResult<String> {
-        Ok(self.dmc.request::<String>("system_version", None).await?)
+        Ok(self.dmc.request("system_version", None).await?)
     }
 
     async fn system_chain(&self) -> RpcResult<String> {
-        Ok(self.dmc.request::<String>("system_chain", None).await?)
+        Ok(self.dmc.request("system_chain", None).await?)
     }
 
-    // now
-
-    fn sub_override_notif_method(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        tokio::spawn(async move {
-            let stream = tokio_stream::iter(["one", "two", "three"]);
-            sink.pipe_from_stream(stream).await;
-        });
-        Ok(())
+    async fn system_properties(&self) -> RpcResult<Properties> {
+        Ok(self.dmc.request("system_properties", None).await?)
     }
 
-    fn sub(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        let _ = sink.send(&"Response_A");
-        let _ = sink.send(&"Response_B");
-        Ok(())
+    async fn system_health(&self) -> RpcResult<Health> {
+        Ok(self.dmc.request::<Health>("system_health", None).await?)
     }
 
+    async fn system_local_peer_id(&self) -> RpcResult<String> {
+        Ok(self.dmc.request("system_localPeerId", None).await?)
+    }
+
+    async fn system_local_listen_addresses(&self) -> RpcResult<Vec<String>> {
+        Ok(self.dmc.request("system_localListenAddresses", None).await?)
+    }
+
+    async fn system_add_reserved_peer(&self, peer: String) -> RpcResult<()> {
+        Ok(self.dmc.request("system_addReservedPeer", rpc_params!(peer)).await?)
+    }
+
+    async fn system_remove_reserved_peer(&self, peer_id: String) -> RpcResult<()> {
+        Ok(self.dmc.request("system_removeReservedPeer", rpc_params!(peer_id)).await?)
+    }
+
+    async fn system_reserved_peers(&self) -> RpcResult<Vec<String>> {
+        Ok(self.dmc.request("system_reservedPeers", None).await?)
+    }
+
+    async fn system_add_log_filter(&self, directives: String) -> RpcResult<()> {
+        Ok(self.dmc.request("system_addLogFilter", rpc_params!(directives)).await?)
+    }
+
+    async fn system_reset_log_filter(&self) -> RpcResult<()> {
+        Ok(self.dmc.request("system_resetLogFilter", None).await?)
+    }
+
+    async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
+        Ok(self.dmc.request("chain_getHeader", rpc_params!(hash)).await?)
+    }
 
     async fn block_hash(
         &self,
         hash: Option<ListOrValue<NumberOrHex>>,
     ) -> RpcResult<ListOrValue<Option<Hash>>> {
-        let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
-        let block = self
-            .dmc
-            .request::<ListOrValue<Option<Hash>>>("chain_getBlockHash", _hash)
-            .await?;
-
-        Ok(block)
+        Ok(self.dmc.request("chain_getBlockHash", rpc_params!(hash)).await?)
     }
 
-    async fn system_properties(&self) -> RpcResult<Properties> {
-        let properties = self
-            .dmc
-            .request::<Properties>("system_properties", None)
-            .await?;
+    async fn finalized_head(&self) -> RpcResult<Hash> {
+        Ok(self.dmc.request("chain_getFinalizedHead", None).await?)
+    }
 
-        Ok(properties)
+    async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash> {
+        Ok(self.dmc.request("author_submitExtrinsic", rpc_params![extrinsic]).await?)
+    }
+
+    async fn insert_key(&self, key_type: String, suri: String, public: Bytes) -> RpcResult<()> {
+        Ok(self.dmc.request("author_insertKey", rpc_params!(key_type, suri, public)).await?)
+    }
+
+    async fn rotate_keys(&self) -> RpcResult<Bytes> {
+        Ok(self.dmc.request("author_rotateKeys", None).await?)
+    }
+
+    async fn has_session_keys(&self, session_keys: Bytes) -> RpcResult<bool> {
+        Ok(self.dmc.request("author_hasSessionKeys", rpc_params!(session_keys)).await?)
+    }
+
+    async fn has_key(&self, public_key: Bytes, key_type: String) -> RpcResult<bool> {
+        Ok(self.dmc.request("author_hasKey", rpc_params!(public_key, key_type)).await?)
+    }
+
+    async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>> {
+        Ok(self.dmc.request("author_pendingExtrinsics", None).await?)
     }
 
     async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
@@ -373,23 +486,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(methods)
     }
 
-    // fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-    //     let client = self.dmc.clone();
-    //     tokio::spawn(async move {
-    //         match client
-    //             .request::<sp_version::RuntimeVersion>("state_getRuntimeVersion", None)
-    //             .await
-    //         {
-    //             Ok(version) => sink
-    //                 .send(&version)
-    //                 .map_err(|e| JsonRpseeError::Custom(e.to_string())),
-    //             Err(e) => Err(e),
-    //         }
-    //     });
-    //
-    //     Ok(())
-    // }
-
     /// subscription methods.
     /// Subscription methods must not be `async`, this is ruled in marco generation.
     fn subscribe_storage(
@@ -400,46 +496,34 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(sink, "state_subscribeStorage", rpc_params!([keys]), "state_unsubscribeStorage")?)
     }
 
-    fn subscribe_new_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeNewHeads", None, "chain_unsubscribeNewHeads")?)
-    }
-
     fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
         Ok(self.sub_clients.subscribe::<sp_version::RuntimeVersion>(sink, "state_subscribeRuntimeVersion", None, "state_unsubscribeRuntimeVersion")?)
     }
 
-    async fn system_health(&self) -> RpcResult<Health> {
-        let health = self.dmc.request::<Health>("system_health", None).await?;
-        Ok(health)
+    fn subscribe_all_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeAllHeads", None, "chain_unsubscribeAllHeads")?)
     }
 
-
-    async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
-        let _hash = hash.map(|h| rpc_params![h]).unwrap_or(rpc_params![]);
-        let header = self
-            .dmc
-            .request::<Option<Header>>("chain_getHeader", _hash)
-            .await?;
-
-        Ok(header)
+    fn subscribe_new_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeNewHeads", None, "chain_unsubscribeNewHeads")?)
     }
 
-    async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash> {
-        let hash = self
-            .dmc
-            .request::<Hash>("author_submitExtrinsic", rpc_params![extrinsic])
-            .await?;
-
-        Ok(hash)
+    fn subscribe_finalized_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeFinalizedHeads", None, "chain_unsubscribeFinalizedHeads")?)
     }
 
-    async fn finalized_head(&self) -> RpcResult<Hash> {
-        let hash = self
-            .dmc
-            .request::<Hash>("chain_getFinalizedHead", None)
-            .await?;
+    fn sub(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        let _ = sink.send(&"Response_A");
+        let _ = sink.send(&"Response_B");
+        Ok(())
+    }
 
-        Ok(hash)
+    fn sub_override_notif_method(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+        tokio::spawn(async move {
+            let stream = tokio_stream::iter(["one", "two", "three"]);
+            sink.pipe_from_stream(stream).await;
+        });
+        Ok(())
     }
 }
 

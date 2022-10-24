@@ -20,6 +20,7 @@ we will rewrite all rpc api that subx contains.
 + [x] state_queryStorageAt
 + [ ] state_getReadProof(block by upstream compiling)
 + [x] state_subscribeStorage
++ [x] state_subscribeRuntimeVersion
 + [x] state_traceBlock
 
 *[System API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L33)*
@@ -28,36 +29,37 @@ we will rewrite all rpc api that subx contains.
 + [x] system_version
 + [x] system_chain
 + [ ] system_chainType(block by upstream compiling)
-+ [ ] system_properties
-+ [ ] system_health
-+ [ ] system_localPeerId
-+ [ ] system_localListenAddresses
-+ [ ] system_peers
++ [ ] system_properties(block by upstream compiling)
++ [x] system_health
++ [x] system_localPeerId
++ [x] system_localListenAddresses
++ [ ] system_peers(block by upstream compiling)
 + [ ] system_unstable_networkState
-+ [ ] system_addReservedPeer
-+ [ ] system_reservedPeers
-+ [ ] system_nodeRoles
-+ [ ] system_syncState
-+ [ ] system_addLogFilter
-+ [ ] system_resetLogFilter
++ [x] system_addReservedPeer
++ [x] system_removeReservedPeer
++ [x] system_reservedPeers
++ [ ] system_nodeRoles(block by upstream compiling)
++ [ ] system_syncState(block by upstream compiling)
++ [x] system_addLogFilter
++ [x] system_resetLogFilter
 
 *[Chain API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L27)*
 
-+ [ ] chain_getHeader
-+ [ ] chain_getBlock
-+ [ ] chain_getBlockHash
-+ [ ] chain_getFinalizedHead
-+ [ ] chain_subscribeAllHeads
++ [x] chain_getHeader
++ [ ] chain_getBlock(block by upstream compiling)
++ [x] chain_getBlockHash
++ [x] chain_getFinalizedHead
++ [x] chain_subscribeAllHeads
 + [x] chain_subscribeNewHeads
-+ [ ] chain_subscribeFinalizedHeads
++ [x] chain_subscribeFinalizedHeads
 
 *[Author API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L30)*
 
-+ [ ] author_submitExtrinsic
-+ [ ] author_insertKey
-+ [ ] author_rotateKeys
-+ [ ] author_hasSessionKeys
-+ [ ] author_hasKey
-+ [ ] author_pendingExtrinsics
-+ [ ] author_removeExtrinsic
-+ [ ] author_submitAndWatchExtrinsic
++ [x] author_submitExtrinsic
++ [x] author_insertKey
++ [x] author_rotateKeys
++ [x] author_hasSessionKeys
++ [x] author_hasKey
++ [x] author_pendingExtrinsics
++ [ ] author_removeExtrinsic(block by upstream compiling)
++ [ ] author_submitAndWatchExtrinsic(block by upstream compiling)
