@@ -111,6 +111,7 @@ pub async fn pull_senders(
     };
     // let batched_vns = crate::db::get_batched_void_number(pool, sender_index, max_sender_index - 1).await?;
     // todo, batch reads instead of read vn one by one.
+
     for idx in (sender_index as u64)..max_sender_index {
         match crate::db::get_one_void_number(pool, idx).await {
             Ok(next) => senders.push(next),
@@ -132,12 +133,7 @@ pub async fn pull_ledger_diff(
     let (more_receivers, receivers) =
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
     let (more_senders, senders) = pull_senders(pool, checkpoint.sender_index, max_senders).await?;
-    // let senders_receivers_total = sqlx::query!(
-    //     "SELECT total FROM senders_receivers_total;",
-    // )
-    // .fetch_one(pool)
-    // .await?;
-    let senders_receivers_total = 0;
+    let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await? as u128;
 
     Ok(PullResponse {
         should_continue: more_receivers,

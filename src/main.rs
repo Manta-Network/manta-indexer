@@ -32,7 +32,6 @@ async fn main() -> Result<()> {
     // initialize logger
     utils::init_logger();
 
-    // // relay::start_relayer_server().await;
-    // let _ = crate::ledger_sync::MantaPayIndexerServer::start_server().await;
+    let _ = crate::ledger_sync::MantaPayIndexerServer::start_server().await;
     futures::future::pending().await
 }

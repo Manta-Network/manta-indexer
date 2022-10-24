@@ -20,7 +20,7 @@ use crate::types::PullResponse;
 use anyhow::Result;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 use jsonrpsee::{
-    core::{async_trait, RpcResult},
+    core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
 };
 use manta_pay::signer::Checkpoint;
@@ -32,7 +32,7 @@ pub mod sync;
 
 #[rpc(server, namespace = "mantaPay")]
 pub trait MantaPayIndexerApi {
-    #[method(name = "pullLedgerDiff")] // no blocking mode, we just query all shards from db
+    #[method(name = "pull_ledger_diff")] // no blocking mode, we just query all shards from db
     async fn pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
@@ -59,10 +59,11 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
 
         let url = &self.ws;
         let client = crate::utils::create_ws_client(url).await?;
-        // let response = sync::pull_ledger_diff(&db, &checkpoint, max_receivers, max_senders);
+        let response = pull::pull_ledger_diff(&db, &checkpoint, max_receivers, max_senders)
+            .await
+            .map_err(|_| JsonRpseeError::AlreadyStopped)?;
 
-        // Ok(response)
-        todo!();
+        Ok(response)
     }
 }
 
@@ -73,7 +74,7 @@ impl MantaPayIndexerServer {
             .build("127.0.0.1:9800")
             .await?;
 
-        let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/indexer.db");
+        let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/latest-dolphin-shards");
 
         let db_config = DbConfig {
             pool_size: 16,

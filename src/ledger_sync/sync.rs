@@ -74,9 +74,12 @@ pub fn reconstruct_shards_from_pull_response(
 4. Save every new shards to each corresponding shard index, and void number.
 5.
 */
-pub async fn sync_shards_from_full_node(pool: &SqlitePool, max_count: (u32, u32)) -> Result<()> {
-    let url = "ws://127.0.0.1:9973";
-    let client = crate::utils::create_ws_client(url).await?;
+pub async fn sync_shards_from_full_node(
+    ws: &str,
+    pool: &SqlitePool,
+    max_count: (u32, u32),
+) -> Result<()> {
+    let client = crate::utils::create_ws_client(ws).await?;
 
     let mut current_checkpoint = crate::db::get_latest_check_point(pool).await?;
     let (max_sender_count, max_receiver_count) = max_count;
@@ -84,6 +87,75 @@ pub async fn sync_shards_from_full_node(pool: &SqlitePool, max_count: (u32, u32)
     let mut next_checkpoint = current_checkpoint.clone();
     loop {
         let now = Instant::now();
+        let resp = synchronize_shards(
+            &client,
+            &next_checkpoint,
+            max_sender_count,
+            max_receiver_count,
+        )
+        .await?;
+        let shards = reconstruct_shards_from_pull_response(&resp)?;
+
+        // update shards
+        let mut stream_shards = tokio_stream::iter(shards.iter());
+        while let Some((shard_index, shard)) = stream_shards.next().await {
+            for (next_index, sh) in shard.iter().enumerate() {
+                // if the shard doesn't exist in db, insert it.
+                if !crate::db::has_shard(pool, *shard_index, next_index as u64).await {
+                    let encoded_utxo = sh.encode();
+                    crate::db::insert_one_shard(
+                        pool,
+                        *shard_index,
+                        next_index as u64,
+                        encoded_utxo,
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        // update void number
+        let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
+        let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
+        while let Some((idx, vn)) = stream_vns.next().await {
+            let vn: Vec<u8> = vn.clone().into();
+            let i = idx + vn_checkpoint;
+            crate::db::insert_one_void_number(pool, i as u64, vn).await?;
+        }
+
+        // update total senders and receivers
+        let new_total = resp.senders_receivers_total as i64;
+        crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
+
+        // update next check point
+        crate::ledger_sync::pull::calculate_next_checkpoint(
+            &shards,
+            &current_checkpoint,
+            &mut next_checkpoint,
+            resp.receivers.len(),
+        );
+
+        // should_continue == true means the synchronization is done.
+        if !resp.should_continue {
+            break;
+        }
+        current_checkpoint = next_checkpoint.clone();
+    }
+
+    Ok(())
+}
+
+pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
+    let client = crate::utils::create_ws_client(ws).await.unwrap();
+
+    let mut current_checkpoint = Checkpoint::default();
+    current_checkpoint.sender_index = 0usize;
+    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+
+    let mut next_checkpoint = current_checkpoint.clone();
+    let mut times = 0u32;
+    let now = Instant::now();
+    loop {
         let resp = synchronize_shards(
             &client,
             &next_checkpoint,
@@ -110,62 +182,21 @@ pub async fn sync_shards_from_full_node(pool: &SqlitePool, max_count: (u32, u32)
             }
         }
 
+        // update void number
         let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
         let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
         while let Some((idx, vn)) = stream_vns.next().await {
-            let encoded_vn = vn.encode();
+            let vn: Vec<u8> = vn.clone().into();
             let i = idx + vn_checkpoint;
-            crate::db::insert_one_void_number(pool, i as u64, encoded_vn).await?;
+            crate::db::insert_one_void_number(pool, i as u64, vn).await?;
         }
 
+        // update total senders and receivers
+        let new_total = resp.senders_receivers_total as i64;
+        crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
+
+        // update next check point
         crate::ledger_sync::pull::calculate_next_checkpoint(
-            &shards,
-            &current_checkpoint,
-            &mut next_checkpoint,
-            resp.receivers.len(),
-        );
-        if !resp.should_continue {
-            break;
-        }
-        current_checkpoint = next_checkpoint.clone();
-    }
-
-    Ok(())
-}
-
-/*
-pub async fn pull_all_shards_to_db(pool: &SqlitePool) -> Result<()> {
-    let url = "ws://127.0.0.1:9973";
-    let client = crate::utils::create_ws_client(url).await.unwrap();
-
-    let mut current_checkpoint = Checkpoint::default();
-    current_checkpoint.sender_index = 0usize;
-    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
-
-    let mut next_checkpoint = current_checkpoint.clone();
-    let mut times = 0u32;
-    let now = Instant::now();
-    loop {
-        let resp = synchronize_shards(
-            &client,
-            &next_checkpoint,
-            max_sender_count,
-            max_receiver_count,
-        )
-        .await
-        .unwrap();
-        let shards = reconstruct_shards_from_pull_response(&resp);
-
-        let mut stream_shards = tokio_stream::iter(shards.iter());
-        while let Some((shard_index, shard)) = stream_shards.next().await {
-            for (next_index, sh) in shard.iter().enumerate() {
-                let encoded_utxo = sh.encode();
-                let row = crate::dn::insert_a_single_shard(pool, shard_index, next_index, encoded_utxo).await?;
-
-            }
-        }
-
-        calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
@@ -186,11 +217,14 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool) -> Result<()> {
     }
     let t = now.elapsed().as_secs();
     println!("time cost: {}", t);
+
+    Ok(())
 }
 
-pub async fn pull_ledger_diff_from_local_node() -> f32 {
+pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
     let url = "ws://127.0.0.1:9973";
-    let client = crate::utils::create_ws_client(url).await.unwrap();
+    let url = "ws://127.0.0.1:9800";
+    let client = crate::utils::create_ws_client(url).await?;
 
     let mut current_checkpoint = Checkpoint::default();
     current_checkpoint.sender_index = 0usize;
@@ -208,11 +242,50 @@ pub async fn pull_ledger_diff_from_local_node() -> f32 {
             max_sender_count,
             max_receiver_count,
         )
-        .await
-        .unwrap();
-        let shards = reconstruct_shards_from_pull_response(&resp);
+        .await?;
+        let shards = reconstruct_shards_from_pull_response(&resp)?;
 
-        calculate_next_checkpoint(
+        crate::ledger_sync::pull::calculate_next_checkpoint(
+            &shards,
+            &current_checkpoint,
+            &mut next_checkpoint,
+            resp.receivers.len(),
+        );
+        println!("next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}", next_checkpoint, resp.receivers.len(), resp.senders_receivers_total);
+        if !resp.should_continue {
+            break;
+        }
+        current_checkpoint = next_checkpoint.clone();
+        let t = now.elapsed().as_secs_f32();
+        time_cost += t;
+        times += 1;
+        println!("pulling times: {}", times);
+    }
+    Ok(time_cost)
+}
+
+pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
+    let mut current_checkpoint = Checkpoint::default();
+    current_checkpoint.sender_index = 0usize;
+    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+
+    let mut next_checkpoint = current_checkpoint.clone();
+    let mut times = 0u32;
+    let mut time_cost = 0f32;
+    println!("========================");
+    loop {
+        let now = Instant::now();
+        let resp = super::pull::pull_ledger_diff(
+            &pool,
+            &next_checkpoint,
+            max_sender_count,
+            max_receiver_count,
+        )
+        .await?;
+
+        let shards = reconstruct_shards_from_pull_response(&resp)?;
+        // crate::ledger_sync::pull::calculate_next_checkpoint(&shards, &current_checkpoint, &mut next_checkpoint, resp.receivers.len());
+        crate::ledger_sync::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
@@ -226,47 +299,9 @@ pub async fn pull_ledger_diff_from_local_node() -> f32 {
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
-        println!("pulling times: {}", times);
+        println!("pulling times: {}. cost: {}", times, t);
     }
-    time_cost
-}
-
-pub fn pull_ledger_diff_from_sqlite() -> f32 {
-    let db_path = "dolphin-shards.db";
-    let conn = Connection::open(db_path).unwrap();
-
-    let mut current_checkpoint = Checkpoint::default();
-    current_checkpoint.sender_index = 0usize;
-    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
-
-    let mut next_checkpoint = current_checkpoint.clone();
-    let mut times = 0u32;
-    let mut time_cost = 0f32;
-    println!("========================");
-    loop {
-        let now = Instant::now();
-        let resp = pull_ledger_diff(
-            &conn,
-            &next_checkpoint,
-            max_sender_count,
-            max_receiver_count,
-        );
-        // dbg!(&resp.receivers.len());
-
-        let shards = reconstruct_shards_from_pull_response(&resp);
-        // calculate_next_checkpoint(&shards, &current_checkpoint, &mut next_checkpoint, resp.receivers.len());
-        calculate_next_checkpoint(&shards, &current_checkpoint, &mut next_checkpoint, 15360);
-        // println!("next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}", next_checkpoint, resp.receivers.len(), resp.senders_receivers_total);
-        if !resp.should_continue {
-            break;
-        }
-        current_checkpoint = next_checkpoint.clone();
-        let t = now.elapsed().as_secs_f32();
-        time_cost += t;
-        times += 1;
-        println!("pulling times: {}", times);
-    }
-    time_cost
+    Ok(time_cost)
 }
 
 #[cfg(test)]
@@ -274,34 +309,30 @@ mod tests {
     use super::*;
     use crate::db;
     use codec::Encode;
-    use rusqlite::Connection;
     use std::mem;
     use std::time::{Duration, Instant};
 
-    #[test]
-    fn test_has_shard() {
-        let db_path = "dolphin-shards.db";
-        let conn = Connection::open(db_path).unwrap();
+    #[tokio::test]
+    async fn bench_pull_ledger_diff_from_sqlite() {
+        let db_path = "latest-dolphin-shards.db";
+        let pool_size = 16u32;
+        let pool = db::initialize_db_pool(db_path, pool_size).await;
+        assert!(pool.is_ok());
 
-        dbg!(has_shard(&conn, 4, 2));
+        let pool = pool.unwrap();
 
-        dbg!(get_shard(&conn, 4, 2));
-    }
-
-    #[test]
-    fn bench_pull_ledger_diff_from_sqlite() {
         let mut sum = 0f32;
-        for i in 0..10 {
-            sum += pull_ledger_diff_from_sqlite();
+        for i in 0..5 {
+            sum += pull_ledger_diff_from_sqlite(&pool).await.unwrap();
         }
-        println!("time cost: {} second", sum / 10f32);
+        println!("time cost: {} second", sum / 5f32);
     }
 
     #[tokio::test]
     async fn bench_pull_shards_from_local_node() {
         let mut sum = 0f32;
-        for i in 0..10 {
-            sum += pull_ledger_diff_from_local_node().await;
+        for i in 0..3 {
+            sum += pull_ledger_diff_from_local_node().await.unwrap();
         }
         println!("time cost: {} second", sum / 10f32);
     }
@@ -332,87 +363,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pull_all_shards_to_db() {
-        let db_path = "shards.db";
+    async fn test_pull_all_shards_to_db() {
+        let db_path = "latest-dolphin-shards-bk.db";
+        let pool_size = 16u32;
+        let pool = db::initialize_db_pool(db_path, pool_size).await;
+        assert!(pool.is_ok());
 
-        // let conn = crate::utils::open_db(db_path).await.unwrap();
-        let conn = Connection::open(db_path).unwrap();
-
-        // create table
-        let table = "
-            CREATE TABLE shards (
-                shard_index   INTEGER NOT NULL,
-                next_index  INTEGER NOT NULL,
-                utxo    BLOB NOT NULL
-            );
-        ";
-        assert!(conn.execute(table, ()).is_ok());
-
-        // create index on shards
-        let shards_index = "
-            CREATE INDEX shard_index ON shards (
-                shard_index	ASC,
-                next_index
-            );
-        ";
-        assert!(conn.execute(shards_index, ()).is_ok());
-
+        let pool = pool.unwrap();
         let url = "ws://127.0.0.1:9973";
-        let client = crate::utils::create_ws_client(url).await.unwrap();
 
-        let mut current_checkpoint = Checkpoint::default();
-        current_checkpoint.sender_index = 0usize;
-        let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
-        // let (max_sender_count, max_receiver_count) = (4, 4);
-
-        let mut next_checkpoint = current_checkpoint.clone();
-        let mut times = 0u32;
-        let now = Instant::now();
-        loop {
-            let resp = synchronize_shards(
-                &client,
-                &next_checkpoint,
-                max_sender_count,
-                max_receiver_count,
-            )
-            .await
-            .unwrap();
-            let shards = reconstruct_shards_from_pull_response(&resp);
-
-            let mut stream_shards = tokio_stream::iter(shards.iter());
-            // INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3)
-            while let Some((shard_index, shard)) = stream_shards.next().await {
-                for (next_index, sh) in shard.iter().enumerate() {
-                    let encoded_shard = sh.encode();
-                    conn.execute(
-                        "INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3)",
-                        rusqlite::params![shard_index, next_index, encoded_shard],
-                    )
-                    .unwrap();
-                }
-            }
-
-            calculate_next_checkpoint(
-                &shards,
-                &current_checkpoint,
-                &mut next_checkpoint,
-                resp.receivers.len(),
-            );
-            println!(
-                "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
-                next_checkpoint,
-                resp.receivers.len(),
-                resp.senders_receivers_total
-            );
-            if !resp.should_continue {
-                break;
-            }
-            current_checkpoint = next_checkpoint.clone();
-            times += 1;
-            println!("times: {}", times);
-        }
-        let t = now.elapsed().as_secs();
-        println!("time cost: {}", t);
+        let r = pull_all_shards_to_db(&pool, url).await;
+        dbg!(r);
     }
 
     #[tokio::test]
@@ -429,7 +390,7 @@ mod tests {
         // assert!(&resp.is_ok());
         let resp = resp.unwrap();
         assert!(resp.should_continue);
-        let shards = reconstruct_shards_from_pull_response(&resp);
+        let shards = reconstruct_shards_from_pull_response(&resp).unwrap();
 
         let length = shards.len();
         for (k, shard) in shards.iter() {
@@ -459,127 +420,13 @@ mod tests {
             hex::encode(&shards.get(&0u8).as_ref().unwrap()[0].1.ciphertext),
             "4ba8c51afa4ef30a05bfabf7db6a69c80f89eccc8fd0e7c80176386554046b64c3293cfe053ab2f56643fdf15eb5983554a955021b28beaea998899359f95be57d9b6f95"
         );
-
-        // println!("---------------");
-        // let next_checkpoint = calculate_next_checkpoint(&shards, &checkpoint, resp.receivers.len());
-        // dbg!(&next_checkpoint);
-        // let resp =
-        //     synchronize_shards(&client, &next_checkpoint, max_sender_count, max_receiver_count).await;
-        // // assert!(&resp.is_ok());
-        // let resp = resp.unwrap();
-        // assert!(resp.should_continue);
-        // let shards = reconstruct_shards_from_pull_response(&resp);
-
-        // let length = shards.len();
-        // for (k, shard) in shards.iter() {
-        //     for sh in shard.iter() {
-        //         println!(
-        //             "k: {}, utxo: {:?}, ephemeral_public_key: {:?}, ciphertext: {:?}",
-        //             k,
-        //             hex::encode(sh.0),
-        //             hex::encode(sh.1.ephemeral_public_key),
-        //             hex::encode(sh.1.ciphertext)
-        //         );
-        //     }
-        // }
     }
 
     #[tokio::test]
     async fn get_storage_hash_should_work() {
         let url = "wss://ws.rococo.dolphin.engineering:443";
         let client = crate::utils::create_ws_client(url).await.unwrap();
-        let hash = get_storage_hash(&client).await;
+        let hash = crate::utils::get_storage_hash(&client).await;
         assert!(hash.is_ok());
     }
-
-    #[tokio::test]
-    async fn write_shards_to_db() {
-        // open db
-        let db_path = "shards.db";
-
-        // let conn = crate::utils::open_db(db_path).await.unwrap();
-        let conn = Connection::open(db_path).unwrap();
-        // init db
-        // dbg!(db::initialize_db(conn.clone()).await);
-
-        // create table
-        let table = "
-            CREATE TABLE shards (
-                shard_index   INTEGER NOT NULL,
-                next_index  INTEGER NOT NULL,
-                utxo    BLOB NOT NULL
-            );
-        ";
-        // dbg!(conn.execute(table, ()));
-
-        // create index on shards
-        let shards_index = "
-            CREATE INDEX shard_index ON shards (
-                shard_index	ASC,
-                next_index
-            );
-        ";
-        // dbg!(conn.execute(shards_index, ()));
-
-        // let url = "ws://127.0.0.1:9973";
-        // let client = crate::utils::create_ws_client(url).await.unwrap();
-        // let resp = synchronize_shards(&client).await;
-        // let resp = resp.unwrap();
-        // assert!(resp.should_continue);
-        // dbg!(resp.senders_receivers_total);
-        // dbg!(resp.receivers.len());
-        // dbg!(resp.senders.len());
-        // let shards = reconstruct_shards_from_pull_response(&resp);
-        // assert!(shards.is_ok());
-        // let shards = shards.unwrap();
-
-        // let mut stream_shards = tokio_stream::iter(shards.into_iter());
-
-        // // INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3)
-        // while let Some((shard_index, shard)) = stream_shards.next().await {
-        //     for (next_index, sh) in shard.iter().enumerate() {
-        //         let encoded_shard = sh.encode();
-        //         conn.execute(
-        //                 "INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3)",
-        //                 rusqlite::params![shard_index, next_index, encoded_shard],
-        //             )
-        //             .unwrap();
-        //     }
-        // }
-
-        // let query_shard = "SELECT shard_index, next_index, utxo FROM Shards WHERE shard_index >= 8 and shard_index <= 162"
-        // let smt: Result<Shard, _> = conn.query_map("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1", [0], |row| row.get(0));
-        // let mut stmt = conn.prepare("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index >= (?1) and next_index = (?2)").unwrap();
-        let mut stmt = conn.prepare("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index >= (?1) and next_index = (?2)").unwrap();
-        let mut stmt = conn
-            .prepare("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index >= (?1)")
-            .unwrap();
-        let mut ms = 0u128;
-        for i in 0..5u8 {
-            let now = Instant::now();
-            let sh = stmt
-                .query_map([0], |row| {
-                    Ok(Shard {
-                        shard_index: row.get(0)?,
-                        next_index: row.get(1)?,
-                        utxo: row.get(2)?,
-                    })
-                })
-                .unwrap();
-            // for s in sh {
-            //     let s = s.unwrap();
-            //     // dbg!(mem::size_of_val(&s.shard_index));
-            //     // dbg!(mem::size_of_val(&s.next_index));
-            //     // dbg!(mem::size_of_val(&s.utxo));
-            //     // dbg!(mem::size_of_val(&s));
-            // }
-            let t = now.elapsed().as_nanos();
-            if i > 0 {
-                ms += t;
-            }
-            println!("length: {}, time: {}", sh.count(), t);
-        }
-        println!("{}", ms / 4);
-    }
 }
-*/

@@ -20,7 +20,7 @@ use manta_pay::signer::Checkpoint;
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqlitePool, SqlitePoolOptions},
-    Error as SqlxError, Row, Sqlite,
+    Acquire, Error as SqlxError, Row, Sqlite,
 };
 use std::{env, path::Path};
 use tokio_stream::StreamExt;
@@ -37,7 +37,11 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
     let m = Migrator::new(Path::new("./migrations")).await?;
 
     // ensure the db exists.
-    assert!(Sqlite::database_exists(&db_url).await?);
+    // assert!(Sqlite::database_exists(&db_url).await?);
+    if let Err(_) = sqlx::sqlite::Sqlite::database_exists(db_url).await {
+        sqlx::sqlite::CREATE_DB_WAL.store(true, std::sync::atomic::Ordering::Release);
+        assert!(sqlx::sqlite::Sqlite::create_database(db_url).await.is_ok());
+    }
 
     let pool = SqlitePoolOptions::new()
         .max_lifetime(None)
@@ -121,13 +125,16 @@ pub async fn insert_one_shard(
     let n = next_index as i64;
 
     let mut conn = pool.acquire().await?;
+    let mut tx = conn.begin().await?;
     let row_at =
         sqlx::query("INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3);")
             .bind(shard_index)
             .bind(n)
             .bind(encoded_utxo)
-            .execute(&mut conn)
+            .execute(&mut tx)
             .await?;
+
+    tx.commit().await?;
 
     Ok(())
 }
@@ -233,27 +240,32 @@ pub async fn update_or_insert_total_senders_receivers(
     pool: &SqlitePool,
     new_total: i64,
 ) -> Result<()> {
-    if let Ok(_val) = total_senders_receivers(pool).await {
+    if let Ok(_val) = get_total_senders_receivers(pool).await {
         // the row exist, update it
         if _val != new_total {
             let mut conn = pool.acquire().await?;
+            let mut tx = conn.begin().await?;
             let _ = sqlx::query("UPDATE senders_receivers_total SET total = ?1;")
                 .bind(new_total)
-                .execute(&mut conn)
+                .execute(&mut tx)
                 .await?;
+            tx.commit().await?;
         }
     } else {
         let mut conn = pool.acquire().await?;
+        let mut tx = conn.begin().await?;
         let _ = sqlx::query("INSERT INTO senders_receivers_total (total) VALUES (?1);")
             .bind(new_total)
-            .execute(&mut conn)
+            .execute(&mut tx)
             .await?;
+
+        tx.commit().await?;
     }
 
     Ok(())
 }
 
-pub async fn total_senders_receivers(pool: &SqlitePool) -> Result<i64> {
+pub async fn get_total_senders_receivers(pool: &SqlitePool) -> Result<i64> {
     let total: (i64,) = sqlx::query_as("SELECT total FROM senders_receivers_total;")
         .fetch_one(pool)
         .await?;
@@ -469,24 +481,26 @@ mod tests {
 
         // insert total senders_receivers first
         let new_total = 100;
-        update_or_insert_total_senders_receivers(&pool, new_total).await;
+        assert!(update_or_insert_total_senders_receivers(&pool, new_total)
+            .await
+            .is_ok());
 
         // check updated value
-        let val = total_senders_receivers(&pool).await;
+        let val = get_total_senders_receivers(&pool).await;
         assert!(val.is_ok());
         let val = val.unwrap();
         assert_eq!(val, new_total);
 
         // update the same total value
         update_or_insert_total_senders_receivers(&pool, new_total).await;
-        let val = total_senders_receivers(&pool).await;
+        let val = get_total_senders_receivers(&pool).await;
         assert!(val.is_ok());
         let val = val.unwrap();
         assert_eq!(val, new_total);
 
         let new_total_1 = new_total + 50;
         update_or_insert_total_senders_receivers(&pool, new_total_1).await;
-        let val_1 = total_senders_receivers(&pool).await;
+        let val_1 = get_total_senders_receivers(&pool).await;
         assert!(val_1.is_ok());
         let val_1 = val_1.unwrap();
         assert_eq!(val_1, new_total_1);
