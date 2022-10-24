@@ -15,7 +15,6 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use anyhow::Result;
-use dotenvy::dotenv;
 
 mod constants;
 mod db;
@@ -30,8 +29,6 @@ pub use errors::*;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<()> {
-    dotenv().ok();
-
     // initialize logger
     utils::init_logger();
 

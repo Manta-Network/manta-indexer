@@ -99,7 +99,7 @@ pub async fn sync_shards_from_full_node(pool: &SqlitePool, max_count: (u32, u32)
                 // if the shard doesn't exist in db, insert it.
                 if !crate::db::has_shard(pool, *shard_index, next_index as u64).await {
                     let encoded_utxo = sh.encode();
-                    crate::db::insert_a_single_shard(
+                    crate::db::insert_one_shard(
                         pool,
                         *shard_index,
                         next_index as u64,
@@ -115,7 +115,7 @@ pub async fn sync_shards_from_full_node(pool: &SqlitePool, max_count: (u32, u32)
         while let Some((idx, vn)) = stream_vns.next().await {
             let encoded_vn = vn.encode();
             let i = idx + vn_checkpoint;
-            crate::db::insert_a_single_void_number(pool, i as u64, encoded_vn).await?;
+            crate::db::insert_one_void_number(pool, i as u64, encoded_vn).await?;
         }
 
         crate::ledger_sync::pull::calculate_next_checkpoint(

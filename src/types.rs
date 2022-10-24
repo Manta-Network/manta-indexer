@@ -88,7 +88,7 @@ pub struct PullResponse {
     pub senders_receivers_total: u128,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Shard {
     pub shard_index: u8,
     pub next_index: i64,

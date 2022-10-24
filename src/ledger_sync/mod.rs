@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::db::DbConfig;
 use crate::logger::IndexerLogger;
 use crate::types::PullResponse;
 use anyhow::Result;
@@ -43,6 +44,7 @@ pub trait MantaPayIndexerApi {
 pub struct MantaPayIndexerServer {
     pub db: SqlitePool, // db pool
     pub ws: String,     // the websocket url to local node
+    pub db_config: DbConfig,
 }
 
 #[async_trait]
@@ -72,10 +74,15 @@ impl MantaPayIndexerServer {
             .await?;
 
         let db_path = concat!(env!("CARGO_MANIFEST_DIR"), "/indexer.db");
-        let db = crate::db::initialize_db_pool().await?;
+
+        let db_config = DbConfig {
+            pool_size: 16,
+            db_url: db_path.to_owned(),
+        };
+        let db = crate::db::initialize_db_pool(&db_config.db_url, db_config.pool_size).await?;
 
         let ws = "127.0.0.1:9944".to_owned();
-        let rpc = Self { db, ws };
+        let rpc = Self { db, ws, db_config };
 
         let addr = server.local_addr()?;
         let handle = server.start(rpc.into_rpc())?;
