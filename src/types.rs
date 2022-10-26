@@ -47,7 +47,7 @@ pub struct RpcMethods {
 }
 
 /// Health struct returned by the RPC
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Health {
     /// Number of connected peers

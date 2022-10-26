@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use super::{middleware::IndexerMiddleware, sub_client_pool::MtoMSubClientPool};
 use crate::logger::RelayerLogger;
 use crate::types::{Health, RpcMethods};
 use anyhow::Result;
-use jsonrpsee::core::client::{ClientT, SubscriptionClientT};
+use jsonrpsee::core::client::ClientT;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 use jsonrpsee::{
@@ -31,9 +32,6 @@ use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
-// use sc_rpc_api::state::ReadProof;
-use crate::relaying::middleware::IndexerMiddleware;
-use crate::relaying::sub_client_pool::MtoMSubClientPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -50,7 +48,7 @@ pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
 
 /// The whole relaying server implementation.
 pub struct MantaRpcRelayServer {
-    pub backend_uri: String,
+    // pub backend_uri: String,
 
     // dmc = directly_method_client, use this client to relay all
     // sync and async method, we manage the subscription method in other single field.
@@ -614,31 +612,43 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 }
 
-pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
-    let server = WsServerBuilder::new()
-        // .max_connections(100)
-        // .max_request_body_size(10)
-        // .max_response_body_size(10)
-        // .ping_interval(Duration::from_secs(60))
-        // .max_subscriptions_per_connection(1024)
-        .set_middleware(IndexerMiddleware::default())
-        .build("127.0.0.1:9988")
-        .await?;
+impl MantaRpcRelayServer {
+    pub async fn new(full_node: &str) -> Result<Self> {
+        let client = crate::utils::create_ws_client(full_node).await?;
+        let relayer = MantaRpcRelayServer {
+            dmc: Arc::new(client),
+            sub_clients: Arc::new(MtoMSubClientPool::new(full_node.to_string())),
+        };
 
-    // let full_node = "ws://127.0.0.1:9800";
-    let full_node = "wss://ws.rococo.dolphin.engineering:443";
-    let client = WsClientBuilder::default().build(&full_node).await?;
-
-    let relayer = MantaRpcRelayServer {
-        backend_uri: full_node.to_string(),
-        dmc: Arc::new(client),
-        sub_clients: Arc::new(MtoMSubClientPool::new(full_node.to_string())),
-    };
-
-    let addr = server.local_addr()?;
-    let handle = server.start(relayer.into_rpc())?;
-    Ok((addr, handle))
+        Ok(relayer)
+    }
 }
+
+// pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
+//     let server = WsServerBuilder::new()
+//         // .max_connections(100)
+//         // .max_request_body_size(10)
+//         // .max_response_body_size(10)
+//         // .ping_interval(Duration::from_secs(60))
+//         // .max_subscriptions_per_connection(1024)
+//         .set_middleware(IndexerMiddleware::default())
+//         .build("127.0.0.1:9988")
+//         .await?;
+
+//     // let full_node = "ws://127.0.0.1:9800";
+//     let full_node = "wss://ws.rococo.dolphin.engineering:443";
+//     let client = crate::utils::create_ws_client(full_node).await?;
+
+//     let relayer = MantaRpcRelayServer {
+//         // backend_uri: full_node.to_string(),
+//         dmc: Arc::new(client),
+//         sub_clients: Arc::new(MtoMSubClientPool::new(full_node.to_string())),
+//     };
+
+//     let addr = server.local_addr()?;
+//     let handle = server.start(relayer.into_rpc())?;
+//     Ok((addr, handle))
+// }
 
 #[cfg(test)]
 mod tests {
@@ -648,18 +658,5 @@ mod tests {
     async fn get_metadata_should_work() {
         let url = "wss://ws.calamari.systems:443";
         assert!(true);
-    }
-
-    #[tokio::test]
-    async fn subscriber_should_work() {
-        start_relayer_server().await;
-        let url = "ws://127.0.0.1:9988";
-        let client = WsClientBuilder::default().build(&url).await.unwrap();
-
-        let mut sub = client.sub().await.unwrap();
-        let first_recv = sub.next().await.unwrap().unwrap();
-        assert_eq!(first_recv, "Response_A".to_string());
-        let second_recv = sub.next().await.unwrap().unwrap();
-        assert_eq!(second_recv, "Response_B".to_string());
     }
 }

@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use dashmap::DashMap;
 use frame_support::log::{error, trace};
-use futures::future::BoxFuture;
 use futures::StreamExt;
 use jsonrpsee::async_client::Client;
 use jsonrpsee::core::client::SubscriptionClientT;

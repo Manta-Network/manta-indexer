@@ -14,28 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-#![allow(dead_code)]
-
-use anyhow::Result;
-
-mod constants;
-mod db;
-mod errors;
-mod indexer;
-mod logger;
-mod relayer;
-mod service;
-mod types;
-mod utils;
-
-pub use errors::*;
-
-#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
-async fn main() -> Result<()> {
-    // initialize logger
-    // utils::init_logger();
-    log4rs::init_file("conf/log.yaml", Default::default())?;
-
-    service::start_service().await?;
-    futures::future::pending().await
+fn main() {
+    // If there's any change in this config file, rerun the build.
+    println!("cargo:rerun-if-changed=config.toml");
 }

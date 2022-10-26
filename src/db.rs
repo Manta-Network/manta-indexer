@@ -20,16 +20,10 @@ use manta_pay::signer::Checkpoint;
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqlitePool, SqlitePoolOptions},
-    Acquire, Error as SqlxError, Row, Sqlite,
+    Acquire, Error as SqlxError, Row,
 };
-use std::{env, path::Path};
+use std::path::Path;
 use tokio_stream::StreamExt;
-
-#[derive(Debug, Clone)]
-pub struct DbConfig {
-    pub pool_size: u32,
-    pub db_url: String,
-}
 
 /// Initialize sqlite as WAL mode(Write-Ahead Logging)
 // https://sqlite.org/wal.html
@@ -47,7 +41,7 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
         .max_lifetime(None)
         .idle_timeout(None)
         .max_connections(pool_size)
-        .connect(&db_url)
+        .connect(db_url)
         .await?;
 
     let mut conn = pool.acquire().await?;

@@ -14,6 +14,7 @@ mod sub_client_pool;
 use anyhow::{bail, Result};
 use jsonrpsee::core::TEN_MB_SIZE_BYTES;
 use jsonrpsee::ws_server::WsServerHandle;
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -22,24 +23,26 @@ const WS_DEFAULT_MAX_SUB_PER_CONN: u32 = 100;
 
 /// JSON-RPC Websocket server settings.
 /// Copied from jsonrpsee cause it's a private type.
-#[derive(Debug, Clone)]
+#[serde_with::serde_as]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct WsServerConfig {
     /// Maximum size in bytes of a request.
-    max_request_body_size: u32,
+    pub max_request_body_size: u32,
     /// Maximum size in bytes of a response.
-    max_response_body_size: u32,
+    pub max_response_body_size: u32,
     /// Maximum number of incoming connections allowed.
-    max_connections: u64,
+    pub max_connections: u64,
     /// Maximum number of subscriptions per connection.
-    max_subscriptions_per_connection: u32,
+    pub max_subscriptions_per_connection: u32,
     /// Max length for logging for requests and responses
     ///
     /// Logs bigger than this limit will be truncated.
-    max_log_length: u32,
+    pub max_log_length: u32,
     /// Whether batch requests are supported by this server or not.
-    batch_requests_supported: bool,
+    pub batch_requests_supported: bool,
     /// The interval at which `Ping` frames are submitted.
-    ping_interval: Duration,
+    #[serde_as(as = "serde_with::DurationSeconds<u64>")]
+    pub ping_interval: Duration,
 }
 
 impl Default for WsServerConfig {
@@ -61,4 +64,21 @@ pub(crate) async fn start_server(
     config: Option<WsServerConfig>,
 ) -> Result<(SocketAddr, WsServerHandle)> {
     bail!("")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_ws_server_config_should_be_ok() {
+        let content = crate::utils::read_config().unwrap();
+        let v = content["server"]["configuration"].to_string();
+        let config: Result<WsServerConfig, _> = toml::from_str(&v);
+        assert!(config.is_ok());
+
+        let config = config.unwrap();
+        assert_eq!(config.max_request_body_size, 10);
+        assert_eq!(config.ping_interval, Duration::from_secs(60));
+    }
 }

@@ -30,6 +30,8 @@ pub enum IndexerError {
     DecodedError,
     #[error("JsonRpsee Error: {0}.")]
     JsonRpseeError(#[from] jsonrpsee::core::error::Error),
+    #[error("Wrong config file(config.toml).")]
+    WrongConfig,
     #[error("Unknown error.")]
     Unknown,
 }

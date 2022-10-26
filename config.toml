@@ -1,8 +1,8 @@
 [configuration]
 frequency = 2                          # it means pull shards per 2 seconds, and should not be bigger than 12s.
-port = 9932
-rpc-method = "mantaPay_pull_ledger_diff"
-db-path = ""
+port = 7788
+rpc_method = "mantaPay_pull_ledger_diff"
+full_node = "ws://127.0.0.1:9944"
 
 [server.configuration]
 # all params are default values
@@ -15,4 +15,5 @@ batch_requests_supported = true
 ping_interval = 60 # in second
 
 [db.configuration]
-connection_pool = 16
+db_path = ""
+pool_size = 16

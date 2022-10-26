@@ -25,7 +25,6 @@ use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::config::MerkleTreeConfiguration;
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio_stream::StreamExt;
@@ -84,7 +83,7 @@ pub async fn sync_shards_from_full_node(
     let mut current_checkpoint = crate::db::get_latest_check_point(pool).await?;
     let (max_sender_count, max_receiver_count) = max_count;
 
-    let mut next_checkpoint = current_checkpoint.clone();
+    let mut next_checkpoint = current_checkpoint;
     loop {
         let now = Instant::now();
         let resp = synchronize_shards(
@@ -118,7 +117,7 @@ pub async fn sync_shards_from_full_node(
         let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
         let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
         while let Some((idx, vn)) = stream_vns.next().await {
-            let vn: Vec<u8> = vn.clone().into();
+            let vn: Vec<u8> = (*vn).into();
             let i = idx + vn_checkpoint;
             crate::db::insert_one_void_number(pool, i as u64, vn).await?;
         }
@@ -128,7 +127,7 @@ pub async fn sync_shards_from_full_node(
         crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
 
         // update next check point
-        crate::ledger_sync::pull::calculate_next_checkpoint(
+        super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
@@ -139,7 +138,7 @@ pub async fn sync_shards_from_full_node(
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
+        current_checkpoint = next_checkpoint;
     }
 
     Ok(())
@@ -149,10 +148,10 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await.unwrap();
 
     let mut current_checkpoint = Checkpoint::default();
-    current_checkpoint.sender_index = 0usize;
+    // current_checkpoint.sender_index = 0usize;
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
 
-    let mut next_checkpoint = current_checkpoint.clone();
+    let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
     let now = Instant::now();
     loop {
@@ -186,7 +185,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
         let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
         while let Some((idx, vn)) = stream_vns.next().await {
-            let vn: Vec<u8> = vn.clone().into();
+            let vn: Vec<u8> = (*vn).into();
             let i = idx + vn_checkpoint;
             crate::db::insert_one_void_number(pool, i as u64, vn).await?;
         }
@@ -196,7 +195,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
 
         // update next check point
-        crate::ledger_sync::pull::calculate_next_checkpoint(
+        super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
@@ -211,7 +210,8 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
+        // current_checkpoint = next_checkpoint.clone();
+        current_checkpoint = next_checkpoint;
         times += 1;
         println!("times: {}", times);
     }
@@ -227,10 +227,10 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
     let client = crate::utils::create_ws_client(url).await?;
 
     let mut current_checkpoint = Checkpoint::default();
-    current_checkpoint.sender_index = 0usize;
+    // current_checkpoint.sender_index = 0usize;
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
 
-    let mut next_checkpoint = current_checkpoint.clone();
+    let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
     let mut time_cost = 0f32;
     println!("========================");
@@ -245,7 +245,7 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
         .await?;
         let shards = reconstruct_shards_from_pull_response(&resp)?;
 
-        crate::ledger_sync::pull::calculate_next_checkpoint(
+        super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
@@ -260,7 +260,8 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
+        // current_checkpoint = next_checkpoint.clone();
+        current_checkpoint = next_checkpoint;
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
@@ -271,17 +272,17 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
 
 pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
     let mut current_checkpoint = Checkpoint::default();
-    current_checkpoint.sender_index = 0usize;
+    // current_checkpoint.sender_index = 0usize;
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
 
-    let mut next_checkpoint = current_checkpoint.clone();
+    let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
     let mut time_cost = 0f32;
     println!("========================");
     loop {
         let now = Instant::now();
         let resp = super::pull::pull_ledger_diff(
-            &pool,
+            pool,
             &next_checkpoint,
             max_sender_count,
             max_receiver_count,
@@ -289,8 +290,8 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         .await?;
 
         let shards = reconstruct_shards_from_pull_response(&resp)?;
-        // crate::ledger_sync::pull::calculate_next_checkpoint(&shards, &current_checkpoint, &mut next_checkpoint, resp.receivers.len());
-        crate::ledger_sync::pull::calculate_next_checkpoint(
+        // super::pull::calculate_next_checkpoint(&shards, &current_checkpoint, &mut next_checkpoint, resp.receivers.len());
+        super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
@@ -300,7 +301,8 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
+        // current_checkpoint = next_checkpoint.clone();
+        current_checkpoint = next_checkpoint;
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
