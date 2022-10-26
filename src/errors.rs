@@ -16,12 +16,20 @@
 
 use thiserror::Error;
 
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub enum IndexerError {
     #[error("The resuest is timeout.")]
     RequestTimeOut,
     #[error("Seems full node doesn't work.")]
     FullNodeIsDown,
+    #[error("Failed to fetch data from db due to: {0}.")]
+    DbFetchError(#[from] sqlx::Error),
+    #[error("Wrong merkle tree index.")]
+    WrongMerkleTreeIndex,
+    #[error("Failed to decode as codec foramt.")]
+    DecodedError,
+    #[error("JsonRpsee Error: {0}.")]
+    JsonRpseeError(#[from] jsonrpsee::core::error::Error),
     #[error("Unknown error.")]
     Unknown,
 }

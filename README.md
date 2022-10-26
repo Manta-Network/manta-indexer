@@ -63,3 +63,37 @@ we will rewrite all rpc api that subx contains.
 + [x] author_pendingExtrinsics
 + [ ] author_removeExtrinsic(block by upstream compiling)
 + [ ] author_submitAndWatchExtrinsic(block by upstream compiling)
+
+## Indexer Part
+## sqlx-cli
+- Install [sqlx-cli]() for creating db or migration.
+```shell
+cargo install sqlx-cli
+```
+
+## Deployment
+- Create db
+```shell
+sqlx db create
+```
+
+- Run db migrations
+```shell
+sqlx migrate run
+```
+
+## Testing
+- Create db
+```shell
+sqlx db create
+```
+
+- Run db migrations
+```shell
+sqlx migrate run
+```
+
+- Run tests
+```shell
+cargo t
+```

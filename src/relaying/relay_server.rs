@@ -16,7 +16,7 @@
 
 use crate::logger::RelayerLogger;
 use crate::types::{Health, RpcMethods};
-use anyhow::{Result};
+use anyhow::Result;
 use jsonrpsee::core::client::{ClientT, SubscriptionClientT};
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
@@ -24,7 +24,7 @@ use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     rpc_params,
-    types::{SubscriptionResult},
+    types::SubscriptionResult,
     SubscriptionSink,
 };
 use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
@@ -32,10 +32,10 @@ use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
 // use sc_rpc_api::state::ReadProof;
+use crate::relaying::middleware::IndexerMiddleware;
+use crate::relaying::sub_client_pool::MtoMSubClientPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use crate::relaying::middleware::IndexerMiddleware;
-use crate::relaying::sub_client_pool::{MtoMSubClientPool};
 
 pub type Hash = sp_core::H256;
 
@@ -314,11 +314,13 @@ pub trait MantaRelayApi {
 impl MantaRelayApiServer for MantaRpcRelayServer {
     /// directly sync method
 
-
     /// directly async method
 
     async fn call(&self, name: String, bytes: Bytes, hash: Option<Hash>) -> RpcResult<Bytes> {
-        Ok(self.dmc.request("state_call", rpc_params!(name, bytes, hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_call", rpc_params!(name, bytes, hash))
+            .await?)
     }
 
     async fn storage_pairs(
@@ -326,7 +328,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         prefix: StorageKey,
         hash: Option<Hash>,
     ) -> RpcResult<Vec<(StorageKey, StorageData)>> {
-        Ok(self.dmc.request("state_getPairs", rpc_params!(prefix, hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_getPairs", rpc_params!(prefix, hash))
+            .await?)
     }
 
     async fn storage_keys_paged(
@@ -336,19 +341,34 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         start_key: Option<StorageKey>,
         hash: Option<Hash>,
     ) -> RpcResult<Vec<StorageKey>> {
-        Ok(self.dmc.request("state_getKeysPaged", rpc_params!(prefix, count, start_key, hash)).await?)
+        Ok(self
+            .dmc
+            .request(
+                "state_getKeysPaged",
+                rpc_params!(prefix, count, start_key, hash),
+            )
+            .await?)
     }
 
     async fn storage(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<StorageData>> {
-        Ok(self.dmc.request("state_getStorage", rpc_params!(key, hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_getStorage", rpc_params!(key, hash))
+            .await?)
     }
 
     async fn storage_hash(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<Hash>> {
-        Ok(self.dmc.request("state_getStorageHash", rpc_params!(key, hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_getStorageHash", rpc_params!(key, hash))
+            .await?)
     }
 
     async fn storage_size(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<u64>> {
-        Ok(self.dmc.request("state_getStorageSize", rpc_params!(key, hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_getStorageSize", rpc_params!(key, hash))
+            .await?)
     }
 
     async fn metadata(&self, hash: Option<Hash>) -> RpcResult<Bytes> {
@@ -356,7 +376,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {
-        Ok(self.dmc.request("state_getRuntimeVersion", rpc_params!(hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_getRuntimeVersion", rpc_params!(hash))
+            .await?)
     }
 
     async fn query_storage(
@@ -365,7 +388,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         block: Hash,
         hash: Option<Hash>,
     ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
-        Ok(self.dmc.request("state_queryStorage", rpc_params!(keys, block, hash)).await?)
+        Ok(self
+            .dmc
+            .request("state_queryStorage", rpc_params!(keys, block, hash))
+            .await?)
     }
 
     async fn query_storage_at(
@@ -373,7 +399,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         keys: Vec<StorageKey>,
         at: Option<Hash>,
     ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
-        Ok(self.dmc.request("state_queryStorageAt", rpc_params!(keys, at)).await?)
+        Ok(self
+            .dmc
+            .request("state_queryStorageAt", rpc_params!(keys, at))
+            .await?)
     }
 
     // async fn read_proof(&self, keys: Vec<StorageKey>, hash: Option<Hash>) -> RpcResult<ReadProof<Hash>> {
@@ -387,7 +416,13 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         storage_keys: Option<String>,
         methods: Option<String>,
     ) -> RpcResult<sp_rpc::tracing::TraceBlockResponse> {
-        Ok(self.dmc.request("state_traceBlock", rpc_params!(block, targets, storage_keys, methods)).await?)
+        Ok(self
+            .dmc
+            .request(
+                "state_traceBlock",
+                rpc_params!(block, targets, storage_keys, methods),
+            )
+            .await?)
     }
 
     async fn system_name(&self) -> RpcResult<String> {
@@ -415,15 +450,24 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn system_local_listen_addresses(&self) -> RpcResult<Vec<String>> {
-        Ok(self.dmc.request("system_localListenAddresses", None).await?)
+        Ok(self
+            .dmc
+            .request("system_localListenAddresses", None)
+            .await?)
     }
 
     async fn system_add_reserved_peer(&self, peer: String) -> RpcResult<()> {
-        Ok(self.dmc.request("system_addReservedPeer", rpc_params!(peer)).await?)
+        Ok(self
+            .dmc
+            .request("system_addReservedPeer", rpc_params!(peer))
+            .await?)
     }
 
     async fn system_remove_reserved_peer(&self, peer_id: String) -> RpcResult<()> {
-        Ok(self.dmc.request("system_removeReservedPeer", rpc_params!(peer_id)).await?)
+        Ok(self
+            .dmc
+            .request("system_removeReservedPeer", rpc_params!(peer_id))
+            .await?)
     }
 
     async fn system_reserved_peers(&self) -> RpcResult<Vec<String>> {
@@ -431,7 +475,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn system_add_log_filter(&self, directives: String) -> RpcResult<()> {
-        Ok(self.dmc.request("system_addLogFilter", rpc_params!(directives)).await?)
+        Ok(self
+            .dmc
+            .request("system_addLogFilter", rpc_params!(directives))
+            .await?)
     }
 
     async fn system_reset_log_filter(&self) -> RpcResult<()> {
@@ -439,14 +486,20 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
-        Ok(self.dmc.request("chain_getHeader", rpc_params!(hash)).await?)
+        Ok(self
+            .dmc
+            .request("chain_getHeader", rpc_params!(hash))
+            .await?)
     }
 
     async fn block_hash(
         &self,
         hash: Option<ListOrValue<NumberOrHex>>,
     ) -> RpcResult<ListOrValue<Option<Hash>>> {
-        Ok(self.dmc.request("chain_getBlockHash", rpc_params!(hash)).await?)
+        Ok(self
+            .dmc
+            .request("chain_getBlockHash", rpc_params!(hash))
+            .await?)
     }
 
     async fn finalized_head(&self) -> RpcResult<Hash> {
@@ -454,11 +507,17 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash> {
-        Ok(self.dmc.request("author_submitExtrinsic", rpc_params![extrinsic]).await?)
+        Ok(self
+            .dmc
+            .request("author_submitExtrinsic", rpc_params![extrinsic])
+            .await?)
     }
 
     async fn insert_key(&self, key_type: String, suri: String, public: Bytes) -> RpcResult<()> {
-        Ok(self.dmc.request("author_insertKey", rpc_params!(key_type, suri, public)).await?)
+        Ok(self
+            .dmc
+            .request("author_insertKey", rpc_params!(key_type, suri, public))
+            .await?)
     }
 
     async fn rotate_keys(&self) -> RpcResult<Bytes> {
@@ -466,11 +525,17 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn has_session_keys(&self, session_keys: Bytes) -> RpcResult<bool> {
-        Ok(self.dmc.request("author_hasSessionKeys", rpc_params!(session_keys)).await?)
+        Ok(self
+            .dmc
+            .request("author_hasSessionKeys", rpc_params!(session_keys))
+            .await?)
     }
 
     async fn has_key(&self, public_key: Bytes, key_type: String) -> RpcResult<bool> {
-        Ok(self.dmc.request("author_hasKey", rpc_params!(public_key, key_type)).await?)
+        Ok(self
+            .dmc
+            .request("author_hasKey", rpc_params!(public_key, key_type))
+            .await?)
     }
 
     async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>> {
@@ -478,10 +543,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
-        let methods = self
-            .dmc
-            .request::<RpcMethods>("rpc_methods", None)
-            .await?;
+        let methods = self.dmc.request::<RpcMethods>("rpc_methods", None).await?;
 
         Ok(methods)
     }
@@ -493,23 +555,48 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         mut sink: SubscriptionSink,
         keys: Option<Vec<StorageKey>>,
     ) -> SubscriptionResult {
-        Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(sink, "state_subscribeStorage", rpc_params!([keys]), "state_unsubscribeStorage")?)
+        Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(
+            sink,
+            "state_subscribeStorage",
+            rpc_params!([keys]),
+            "state_unsubscribeStorage",
+        )?)
     }
 
     fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        Ok(self.sub_clients.subscribe::<sp_version::RuntimeVersion>(sink, "state_subscribeRuntimeVersion", None, "state_unsubscribeRuntimeVersion")?)
+        Ok(self.sub_clients.subscribe::<sp_version::RuntimeVersion>(
+            sink,
+            "state_subscribeRuntimeVersion",
+            None,
+            "state_unsubscribeRuntimeVersion",
+        )?)
     }
 
     fn subscribe_all_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeAllHeads", None, "chain_unsubscribeAllHeads")?)
+        Ok(self.sub_clients.subscribe::<Header>(
+            sink,
+            "chain_subscribeAllHeads",
+            None,
+            "chain_unsubscribeAllHeads",
+        )?)
     }
 
     fn subscribe_new_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeNewHeads", None, "chain_unsubscribeNewHeads")?)
+        Ok(self.sub_clients.subscribe::<Header>(
+            sink,
+            "chain_subscribeNewHeads",
+            None,
+            "chain_unsubscribeNewHeads",
+        )?)
     }
 
     fn subscribe_finalized_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        Ok(self.sub_clients.subscribe::<Header>(sink, "chain_subscribeFinalizedHeads", None, "chain_unsubscribeFinalizedHeads")?)
+        Ok(self.sub_clients.subscribe::<Header>(
+            sink,
+            "chain_subscribeFinalizedHeads",
+            None,
+            "chain_unsubscribeFinalizedHeads",
+        )?)
     }
 
     fn sub(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
@@ -538,7 +625,7 @@ pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
         .build("127.0.0.1:9988")
         .await?;
 
-    let full_node = "ws://127.0.0.1:9800";
+    // let full_node = "ws://127.0.0.1:9800";
     let full_node = "wss://ws.rococo.dolphin.engineering:443";
     let client = WsClientBuilder::default().build(&full_node).await?;
 

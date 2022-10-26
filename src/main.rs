@@ -20,12 +20,13 @@ use relaying::relay_server;
 mod constants;
 mod db;
 mod errors;
+mod ledger_sync;
 mod logger;
-mod pull_service;
-mod sync;
+mod relaying;
 mod types;
 mod utils;
-mod relaying;
+
+pub use errors::*;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<()> {
@@ -33,6 +34,8 @@ async fn main() -> Result<()> {
     // utils::init_logger();
     log4rs::init_file("conf/log.yaml", Default::default())?;
 
+    // todo, merge both rpc services into one rpc handler
     relay_server::start_relayer_server().await?;
+    let _ = crate::ledger_sync::MantaPayIndexerServer::start_server().await;
     futures::future::pending().await
 }

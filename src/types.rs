@@ -35,7 +35,7 @@ pub type Group = [u8; EPHEMERAL_PUBLIC_KEY_LENGTH];
 pub type Ciphertext = [u8; CIPHER_TEXT_LENGTH];
 
 /// Receiver Chunk Data Type
-pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>;
+pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>; // The size of each sinle element should be 132 bytes
 
 /// Sender Chunk Data Type
 pub type SenderChunk = Vec<VoidNumber>;
@@ -60,7 +60,7 @@ pub struct Health {
     pub should_have_peers: bool,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize)]
+#[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize, sqlx::Decode, sqlx::Encode)]
 pub struct EncryptedNote {
     /// Ephemeral Public Key
     pub ephemeral_public_key: Group,
@@ -86,6 +86,14 @@ pub struct PullResponse {
 
     /// Total Number of Senders/Receivers in Ledger
     pub senders_receivers_total: u128,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Shard {
+    pub shard_index: u8,
+    pub next_index: i64,
+    // utxo: (Utxo, EncryptedNote),
+    pub utxo: Vec<u8>,
 }
 
 // Currently serde::Deserialize doesn't support an array whose length is bigger than 16.

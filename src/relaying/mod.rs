@@ -1,3 +1,4 @@
+pub mod middleware;
 /// Relaying part relays the requests from Dapp to backend full node.
 /// It plays a role as the startup part of service, which means we should raise up a
 /// service use `start_server()` below and inject any udf logic into the server impl.
@@ -8,15 +9,13 @@
 /// The ideal case is that relay server maintains N ws connections with full node but it holds
 /// M ws connections from Dapp anywhere (M >> N).
 pub mod relay_server;
-pub mod middleware;
 mod sub_client_pool;
 
-use std::net::SocketAddr;
 use anyhow::{bail, Result};
-use jsonrpsee::ws_server::WsServerHandle;
-use std::time::Duration;
 use jsonrpsee::core::TEN_MB_SIZE_BYTES;
-
+use jsonrpsee::ws_server::WsServerHandle;
+use std::net::SocketAddr;
+use std::time::Duration;
 
 const WS_DEFAULT_MAX_CONN: u64 = 1000;
 const WS_DEFAULT_MAX_SUB_PER_CONN: u32 = 100;
@@ -57,8 +56,9 @@ impl Default for WsServerConfig {
     }
 }
 
-
 /// Here's start a relaying server
-pub(crate) async fn start_server(config: Option<WsServerConfig>) -> Result<(SocketAddr, WsServerHandle)> {
+pub(crate) async fn start_server(
+    config: Option<WsServerConfig>,
+) -> Result<(SocketAddr, WsServerHandle)> {
     bail!("")
 }
