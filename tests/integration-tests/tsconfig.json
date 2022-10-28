@@ -8,8 +8,9 @@
     "outDir": "dist",
     "rootDir": "src",
     "moduleResolution": "node",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
-  "include": ["./src/*.ts"],
+  "include": ["./src/*.ts", "./src/*.json"],
   "exclude": ["node_modules", "dist"]
 }

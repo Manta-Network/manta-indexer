@@ -20,10 +20,8 @@ function isValidAddress(address: string) {
 }
 
 async function testSubNewHead(api: ApiPromise) {
-    // 传入一个订阅回调，在内部可以调用自己，在合适的时间 unsub 该连接。
     let count = 0;
 
-// Subscribe to the new headers
     const unsubHeads = await api.rpc.chain.subscribeNewHeads((lastHeader) => {
         console.log(`last block #${lastHeader.number} has hash ${lastHeader.hash}`);
 
