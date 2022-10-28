@@ -28,7 +28,9 @@ use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio_stream::StreamExt;
+use tracing::{debug, info, instrument};
 
+#[instrument]
 pub async fn synchronize_shards(
     ws: &WsClient,
     next_checkpoint: &Checkpoint,
@@ -73,6 +75,7 @@ pub fn reconstruct_shards_from_pull_response(
 4. Save every new shards to each corresponding shard index, and void number.
 5.
 */
+#[instrument]
 pub async fn sync_shards_from_full_node(
     ws: &str,
     pool: &SqlitePool,
@@ -138,12 +141,13 @@ pub async fn sync_shards_from_full_node(
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint;
+        current_checkpoint = next_checkpoint.clone();
     }
 
     Ok(())
 }
 
+#[instrument]
 pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await.unwrap();
 
@@ -210,8 +214,8 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         if !resp.should_continue {
             break;
         }
-        // current_checkpoint = next_checkpoint.clone();
-        current_checkpoint = next_checkpoint;
+        current_checkpoint = next_checkpoint.clone();
+        // current_checkpoint = next_checkpoint;
         times += 1;
         println!("times: {}", times);
     }
@@ -221,14 +225,14 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     Ok(())
 }
 
+#[instrument]
 pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
-    // let url = "ws://127.0.0.1:9973";
-    let url = "ws://127.0.0.1:9801";
+    let url = "ws://127.0.0.1:7788";
     let client = crate::utils::create_ws_client(url).await?;
 
     let mut current_checkpoint = Checkpoint::default();
-    // current_checkpoint.sender_index = 0usize;
-    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+    // let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+    let (max_sender_count, max_receiver_count) = (1024, 1024);
 
     let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
@@ -236,6 +240,7 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
     println!("========================");
     loop {
         let now = Instant::now();
+        dbg!(1);
         let resp = synchronize_shards(
             &client,
             &next_checkpoint,
@@ -243,6 +248,7 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
             max_receiver_count,
         )
         .await?;
+        dbg!(10);
         let shards = reconstruct_shards_from_pull_response(&resp)?;
 
         super::pull::calculate_next_checkpoint(
@@ -260,8 +266,8 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
         if !resp.should_continue {
             break;
         }
-        // current_checkpoint = next_checkpoint.clone();
-        current_checkpoint = next_checkpoint;
+        current_checkpoint = next_checkpoint.clone();
+        // current_checkpoint = next_checkpoint;
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
@@ -270,6 +276,7 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
     Ok(time_cost)
 }
 
+#[instrument]
 pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
     let mut current_checkpoint = Checkpoint::default();
     // current_checkpoint.sender_index = 0usize;
@@ -301,8 +308,7 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         if !resp.should_continue {
             break;
         }
-        // current_checkpoint = next_checkpoint.clone();
-        current_checkpoint = next_checkpoint;
+        current_checkpoint = next_checkpoint.clone();
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;

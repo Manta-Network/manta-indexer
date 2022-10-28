@@ -14,25 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use super::{middleware::IndexerMiddleware, sub_client_pool::MtoMSubClientPool};
-use crate::logger::RelayerLogger;
+use super::sub_client_pool::MtoMSubClientPool;
 use crate::types::{Health, RpcMethods};
 use anyhow::Result;
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 use jsonrpsee::{
-    core::{async_trait, RpcResult},
+    core::{async_trait, client::ClientT, RpcResult},
     proc_macros::rpc,
     rpc_params,
     types::SubscriptionResult,
+    ws_client::WsClient,
     SubscriptionSink,
 };
 use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
 use sp_runtime::traits::BlakeTwo256;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 pub type Hash = sp_core::H256;
@@ -298,14 +294,6 @@ pub trait MantaRelayApi {
     item = Header
     )]
     fn subscribe_finalized_heads(&self);
-
-    // a test debug subscription
-    #[subscription(name = "sub" => "subNotif", unsubscribe = "unsub", item = String)]
-    fn sub_override_notif_method(&self);
-
-    // a test debug method
-    #[subscription(name = "subscribe", item = String)]
-    fn sub(&self);
 }
 
 #[async_trait]
@@ -596,20 +584,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             "chain_unsubscribeFinalizedHeads",
         )?)
     }
-
-    fn sub(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        let _ = sink.send(&"Response_A");
-        let _ = sink.send(&"Response_B");
-        Ok(())
-    }
-
-    fn sub_override_notif_method(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
-        tokio::spawn(async move {
-            let stream = tokio_stream::iter(["one", "two", "three"]);
-            sink.pipe_from_stream(stream).await;
-        });
-        Ok(())
-    }
 }
 
 impl MantaRpcRelayServer {
@@ -623,32 +597,6 @@ impl MantaRpcRelayServer {
         Ok(relayer)
     }
 }
-
-// pub async fn start_relayer_server() -> Result<(SocketAddr, WsServerHandle)> {
-//     let server = WsServerBuilder::new()
-//         // .max_connections(100)
-//         // .max_request_body_size(10)
-//         // .max_response_body_size(10)
-//         // .ping_interval(Duration::from_secs(60))
-//         // .max_subscriptions_per_connection(1024)
-//         .set_middleware(IndexerMiddleware::default())
-//         .build("127.0.0.1:9988")
-//         .await?;
-
-//     // let full_node = "ws://127.0.0.1:9800";
-//     let full_node = "wss://ws.rococo.dolphin.engineering:443";
-//     let client = crate::utils::create_ws_client(full_node).await?;
-
-//     let relayer = MantaRpcRelayServer {
-//         // backend_uri: full_node.to_string(),
-//         dmc: Arc::new(client),
-//         sub_clients: Arc::new(MtoMSubClientPool::new(full_node.to_string())),
-//     };
-
-//     let addr = server.local_addr()?;
-//     let handle = server.start(relayer.into_rpc())?;
-//     Ok((addr, handle))
-// }
 
 #[cfg(test)]
 mod tests {

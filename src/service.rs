@@ -21,15 +21,13 @@ use crate::relayer::{
     WsServerConfig,
 };
 use anyhow::Result;
-use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
-
-pub type RpcExtension = jsonrpsee::RpcModule<()>;
+use jsonrpsee::ws_server::WsServerBuilder;
 
 pub async fn start_service() -> Result<()> {
-    let mut module = RpcExtension::new(());
+    let mut module = jsonrpsee::RpcModule::<()>::new(());
 
     let config = crate::utils::read_config()?;
-    let full_node = config["configuration"]["full_node"]
+    let full_node = config["indexer"]["configuration"]["full_node"]
         .as_str()
         .ok_or(crate::IndexerError::WrongConfig)?;
     let pool_size = config["db"]["configuration"]["pool_size"]
@@ -43,11 +41,11 @@ pub async fn start_service() -> Result<()> {
     let indexer_rpc = MantaPayIndexerServer::new(db_path, pool_size, full_node).await?;
     module.merge(indexer_rpc.into_rpc())?;
 
-    let port = config["configuration"]["port"]
-        .as_str()
+    let port = config["indexer"]["configuration"]["port"]
+        .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
-    let frequency = config["configuration"]["frequency"]
-        .as_str()
+    let frequency = config["indexer"]["configuration"]["frequency"]
+        .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
 
     // create relay rpc handler
@@ -59,6 +57,16 @@ pub async fn start_service() -> Result<()> {
     let srv_config: WsServerConfig = toml::from_str(&config)?;
     let client = crate::utils::create_ws_client(full_node).await?;
 
+    let mut available_methods = module.method_names().collect::<Vec<_>>();
+    available_methods.sort_unstable();
+    module
+        .register_method("indexer_rpc_methods", move |_, _| {
+            Ok(serde_json::json!({
+                "methods": available_methods,
+            }))
+        })
+        .expect("infallible all other methods have their own address space; qed");
+
     let srv_addr = format!("127.0.0.1:{port}");
     let server = WsServerBuilder::new()
         .max_connections(srv_config.max_connections)
@@ -67,6 +75,7 @@ pub async fn start_service() -> Result<()> {
         .ping_interval(srv_config.ping_interval)
         .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
         .set_middleware(IndexerMiddleware::default())
+        // .set_middleware(crate::logger::IndexerLogger)
         .build(srv_addr)
         .await?;
 

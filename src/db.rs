@@ -499,4 +499,10 @@ mod tests {
         let val_1 = val_1.unwrap();
         assert_eq!(val_1, new_total_1);
     }
+
+    #[tokio::test]
+    async fn transaction_should_work() {
+        // todo, ensure db transaction will work as expected
+        assert!(true);
+    }
 }

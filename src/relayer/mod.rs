@@ -1,3 +1,19 @@
+// Copyright 2020-2022 Manta Network.
+// This file is part of Manta.
+//
+// Manta is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Manta is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Manta.  If not, see <http://www.gnu.org/licenses/>.
+
 pub mod middleware;
 /// Relaying part relays the requests from Dapp to backend full node.
 /// It plays a role as the startup part of service, which means we should raise up a
@@ -13,9 +29,7 @@ mod sub_client_pool;
 
 use anyhow::{bail, Result};
 use jsonrpsee::core::TEN_MB_SIZE_BYTES;
-use jsonrpsee::ws_server::WsServerHandle;
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::time::Duration;
 
 const WS_DEFAULT_MAX_CONN: u64 = 1000;
@@ -57,13 +71,6 @@ impl Default for WsServerConfig {
             ping_interval: Duration::from_secs(60),
         }
     }
-}
-
-/// Here's start a relaying server
-pub(crate) async fn start_server(
-    config: Option<WsServerConfig>,
-) -> Result<(SocketAddr, WsServerHandle)> {
-    bail!("")
 }
 
 #[cfg(test)]

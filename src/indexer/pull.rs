@@ -21,6 +21,7 @@ use codec::Decode;
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
+use tracing::{debug, info, instrument};
 
 /// Calculate the next checkpoint.
 pub fn calculate_next_checkpoint(
@@ -39,6 +40,7 @@ pub fn calculate_next_checkpoint(
     }
 }
 
+#[instrument]
 pub async fn pull_receivers(
     pool: &SqlitePool,
     receiver_indices: [usize; 256],
@@ -54,6 +56,10 @@ pub async fn pull_receivers(
     };
 
     for (shard_index, utxo_index) in receiver_indices.into_iter().enumerate() {
+        debug!(
+            "query shard index: {}, and utxo_index: {}",
+            shard_index, utxo_index
+        );
         more_receivers |= pull_receivers_for_shard(
             pool,
             shard_index as u8,
@@ -70,6 +76,7 @@ pub async fn pull_receivers(
     Ok((more_receivers, receivers))
 }
 
+#[instrument]
 pub async fn pull_receivers_for_shard(
     pool: &SqlitePool,
     shard_index: u8,
@@ -79,6 +86,10 @@ pub async fn pull_receivers_for_shard(
     receivers_pulled: &mut u64,
 ) -> Result<bool> {
     let max_receiver_index = (receiver_index as u64) + max_update;
+    debug!(
+        "query shard index: {}, and receiver_index: {}, {}",
+        shard_index, receiver_index, max_receiver_index
+    );
     let shards =
         crate::db::get_batched_shards(pool, shard_index, receiver_index as u64, max_receiver_index)
             .await?;
@@ -98,6 +109,7 @@ pub async fn pull_receivers_for_shard(
     Ok(crate::db::has_shard(pool, shard_index, max_receiver_index).await)
 }
 
+#[instrument]
 pub async fn pull_senders(
     pool: &SqlitePool,
     sender_index: usize,
@@ -124,6 +136,7 @@ pub async fn pull_senders(
     ))
 }
 
+#[instrument]
 pub async fn pull_ledger_diff(
     pool: &SqlitePool,
     checkpoint: &Checkpoint,

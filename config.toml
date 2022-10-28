@@ -1,4 +1,4 @@
-[configuration]
+[indexer.configuration]
 frequency = 2                          # it means pull shards per 2 seconds, and should not be bigger than 12s.
 port = 7788
 rpc_method = "mantaPay_pull_ledger_diff"
@@ -15,5 +15,5 @@ batch_requests_supported = true
 ping_interval = 60 # in second
 
 [db.configuration]
-db_path = ""
+db_path = "dolphin-shards.db"
 pool_size = 16

@@ -17,4 +17,5 @@
 fn main() {
     // If there's any change in this config file, rerun the build.
     println!("cargo:rerun-if-changed=config.toml");
+    println!("cargo:rerun-if-changed=Cargo.toml");
 }

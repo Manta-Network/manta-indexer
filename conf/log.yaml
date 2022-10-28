@@ -26,4 +26,3 @@ root:
   level: trace
   appenders:
     - log_app
-
