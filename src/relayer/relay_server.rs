@@ -21,14 +21,14 @@ use jsonrpsee::{
     core::{async_trait, client::ClientT, RpcResult},
     proc_macros::rpc,
     rpc_params,
-    types::SubscriptionResult,
+    types::{EmptyParams, SubscriptionResult},
     ws_client::WsClient,
     SubscriptionSink,
 };
 use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
-use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::traits::{BlakeTwo256, IdentifyAccount, Verify};
 use std::sync::Arc;
 
 pub type Hash = sp_core::H256;
@@ -41,6 +41,11 @@ pub type BlockNumber = u32;
 
 /// Block header type as expected by this runtime.
 pub type Header = sp_runtime::generic::Header<BlockNumber, BlakeTwo256>;
+
+pub type AccountId = <<sp_runtime::MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
+
+// Nonce
+pub type Index = u32;
 
 /// The whole relaying server implementation.
 pub struct MantaRpcRelayServer {
@@ -175,33 +180,8 @@ pub trait MantaRelayApi {
     #[method(name = "system_health")]
     async fn system_health(&self) -> RpcResult<Health>;
 
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L62
-    #[method(name = "system_localPeerId")]
-    async fn system_local_peer_id(&self) -> RpcResult<String>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L66
-    #[method(name = "system_localListenAddresses")]
-    async fn system_local_listen_addresses(&self) -> RpcResult<Vec<String>>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L86
-    #[method(name = "system_addReservedPeer")]
-    async fn system_add_reserved_peer(&self, peer: String) -> RpcResult<()>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L94
-    #[method(name = "system_removeReservedPeer")]
-    async fn system_remove_reserved_peer(&self, peer_id: String) -> RpcResult<()>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L99
-    #[method(name = "system_reservedPeers")]
-    async fn system_reserved_peers(&self) -> RpcResult<Vec<String>>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L112
-    #[method(name = "system_addLogFilter")]
-    async fn system_add_log_filter(&self, directives: String) -> RpcResult<()>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L120
-    #[method(name = "system_resetLogFilter")]
-    async fn system_reset_log_filter(&self) -> RpcResult<()>;
+    #[method(name = "system_accountNextIndex", aliases = ["account_nextIndex"])]
+    async fn nonce(&self, account: AccountId) -> RpcResult<Index>;
 
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L28
     #[method(name = "chain_getHeader")]
@@ -222,22 +202,6 @@ pub trait MantaRelayApi {
     #[method(name = "author_submitExtrinsic")]
     async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash>;
 
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L35
-    #[method(name = "author_insertKey")]
-    async fn insert_key(&self, key_type: String, suri: String, public: Bytes) -> RpcResult<()>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L39
-    #[method(name = "author_rotateKeys")]
-    async fn rotate_keys(&self) -> RpcResult<Bytes>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L43
-    #[method(name = "author_hasSessionKeys")]
-    async fn has_session_keys(&self, session_keys: Bytes) -> RpcResult<bool>;
-
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L51
-    #[method(name = "author_hasKey")]
-    async fn has_key(&self, public_key: Bytes, key_type: String) -> RpcResult<bool>;
-
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L57
     #[method(name = "author_pendingExtrinsics")]
     async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>>;
@@ -250,48 +214,48 @@ pub trait MantaRelayApi {
 
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L110
     #[subscription(
-    name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
-    unsubscribe = "state_unsubscribeRuntimeVersion",
-    aliases = ["chain_subscribeRuntimeVersion"],
-    unsubscribe_aliases = ["chain_unsubscribeRuntimeVersion"],
-    item = sp_version::RuntimeVersion,
+        name = "state_subscribeRuntimeVersion" => "state_runtimeVersion",
+        unsubscribe = "state_unsubscribeRuntimeVersion",
+        aliases = ["chain_subscribeRuntimeVersion"],
+        unsubscribe_aliases = ["chain_unsubscribeRuntimeVersion"],
+        item = sp_version::RuntimeVersion,
     )]
     fn subscribe_runtime_version(&self);
 
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/state/mod.rs#L120
     #[subscription(
-    name = "state_subscribeStorage" => "state_storage",
-    unsubscribe = "state_unsubscribeStorage",
-    item = StorageChangeSet < Hash >,
+        name = "state_subscribeStorage" => "state_storage",
+        unsubscribe = "state_unsubscribeStorage",
+        item = StorageChangeSet<Hash>,
     )]
     fn subscribe_storage(&self, keys: Option<Vec<StorageKey>>);
 
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L49
     #[subscription(
-    name = "chain_subscribeAllHeads" => "chain_allHead",
-    unsubscribe = "chain_unsubscribeAllHeads",
-    item = Header
+        name = "chain_subscribeAllHeads" => "chain_allHead",
+        unsubscribe = "chain_unsubscribeAllHeads",
+        item = Header
     )]
     fn subscribe_all_heads(&self);
 
     // New head subscription.
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L58
     #[subscription(
-    name = "chain_subscribeNewHeads" => "chain_newHead",
-    aliases = ["subscribe_newHead", "chain_subscribeNewHead"],
-    unsubscribe = "chain_unsubscribeNewHeads",
-    unsubscribe_aliases = ["unsubscribe_newHead", "chain_unsubscribeNewHead"],
-    item = Header
+        name = "chain_subscribeNewHeads" => "chain_newHead",
+        aliases = ["subscribe_newHead", "chain_subscribeNewHead"],
+        unsubscribe = "chain_unsubscribeNewHeads",
+        unsubscribe_aliases = ["unsubscribe_newHead", "chain_unsubscribeNewHead"],
+        item = Header
     )]
     fn subscribe_new_heads(&self);
 
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L67
     #[subscription(
-    name = "chain_subscribeFinalizedHeads" => "chain_finalizedHead",
-    aliases = ["chain_subscribeFinalisedHeads"],
-    unsubscribe = "chain_unsubscribeFinalizedHeads",
-    unsubscribe_aliases = ["chain_unsubscribeFinalisedHeads"],
-    item = Header
+        name = "chain_subscribeFinalizedHeads" => "chain_finalizedHead",
+        aliases = ["chain_subscribeFinalisedHeads"],
+        unsubscribe = "chain_unsubscribeFinalizedHeads",
+        unsubscribe_aliases = ["chain_unsubscribeFinalisedHeads"],
+        item = Header
     )]
     fn subscribe_finalized_heads(&self);
 }
@@ -358,7 +322,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn metadata(&self, hash: Option<Hash>) -> RpcResult<Bytes> {
-        Ok(self.dmc.request("state_getMetadata", None).await?)
+        Ok(self.dmc.request("state_getMetadata", rpc_params![]).await?)
     }
 
     async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {
@@ -391,10 +355,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .await?)
     }
 
-    // async fn read_proof(&self, keys: Vec<StorageKey>, hash: Option<Hash>) -> RpcResult<ReadProof<Hash>> {
-    //     Ok(self.dmc.request("state_getReadProof", rpc_params!(keys, hash)).await?)
-    // }
-
     async fn trace_block(
         &self,
         block: Hash,
@@ -412,63 +372,33 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn system_name(&self) -> RpcResult<String> {
-        Ok(self.dmc.request("system_name", None).await?)
+        Ok(self.dmc.request("system_name", rpc_params![]).await?)
     }
 
     async fn system_version(&self) -> RpcResult<String> {
-        Ok(self.dmc.request("system_version", None).await?)
+        Ok(self.dmc.request("system_version", rpc_params![]).await?)
     }
 
     async fn system_chain(&self) -> RpcResult<String> {
-        Ok(self.dmc.request("system_chain", None).await?)
+        Ok(self.dmc.request("system_chain", rpc_params![]).await?)
     }
 
     async fn system_properties(&self) -> RpcResult<Properties> {
-        Ok(self.dmc.request("system_properties", None).await?)
+        Ok(self.dmc.request("system_properties", rpc_params![]).await?)
     }
 
     async fn system_health(&self) -> RpcResult<Health> {
-        Ok(self.dmc.request::<Health>("system_health", None).await?)
-    }
-
-    async fn system_local_peer_id(&self) -> RpcResult<String> {
-        Ok(self.dmc.request("system_localPeerId", None).await?)
-    }
-
-    async fn system_local_listen_addresses(&self) -> RpcResult<Vec<String>> {
         Ok(self
             .dmc
-            .request("system_localListenAddresses", None)
+            .request::<Health>("system_health", rpc_params![])
             .await?)
     }
 
-    async fn system_add_reserved_peer(&self, peer: String) -> RpcResult<()> {
+    async fn nonce(&self, account: AccountId) -> RpcResult<Index> {
         Ok(self
             .dmc
-            .request("system_addReservedPeer", rpc_params!(peer))
+            .request("system_accountNextIndex", rpc_params!(account))
             .await?)
-    }
-
-    async fn system_remove_reserved_peer(&self, peer_id: String) -> RpcResult<()> {
-        Ok(self
-            .dmc
-            .request("system_removeReservedPeer", rpc_params!(peer_id))
-            .await?)
-    }
-
-    async fn system_reserved_peers(&self) -> RpcResult<Vec<String>> {
-        Ok(self.dmc.request("system_reservedPeers", None).await?)
-    }
-
-    async fn system_add_log_filter(&self, directives: String) -> RpcResult<()> {
-        Ok(self
-            .dmc
-            .request("system_addLogFilter", rpc_params!(directives))
-            .await?)
-    }
-
-    async fn system_reset_log_filter(&self) -> RpcResult<()> {
-        Ok(self.dmc.request("system_resetLogFilter", None).await?)
     }
 
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
@@ -489,7 +419,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn finalized_head(&self) -> RpcResult<Hash> {
-        Ok(self.dmc.request("chain_getFinalizedHead", None).await?)
+        Ok(self
+            .dmc
+            .request("chain_getFinalizedHead", rpc_params![])
+            .await?)
     }
 
     async fn submit_extrinsic(&self, extrinsic: Bytes) -> RpcResult<Hash> {
@@ -499,37 +432,18 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .await?)
     }
 
-    async fn insert_key(&self, key_type: String, suri: String, public: Bytes) -> RpcResult<()> {
-        Ok(self
-            .dmc
-            .request("author_insertKey", rpc_params!(key_type, suri, public))
-            .await?)
-    }
-
-    async fn rotate_keys(&self) -> RpcResult<Bytes> {
-        Ok(self.dmc.request("author_rotateKeys", None).await?)
-    }
-
-    async fn has_session_keys(&self, session_keys: Bytes) -> RpcResult<bool> {
-        Ok(self
-            .dmc
-            .request("author_hasSessionKeys", rpc_params!(session_keys))
-            .await?)
-    }
-
-    async fn has_key(&self, public_key: Bytes, key_type: String) -> RpcResult<bool> {
-        Ok(self
-            .dmc
-            .request("author_hasKey", rpc_params!(public_key, key_type))
-            .await?)
-    }
-
     async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>> {
-        Ok(self.dmc.request("author_pendingExtrinsics", None).await?)
+        Ok(self
+            .dmc
+            .request("author_pendingExtrinsics", rpc_params![])
+            .await?)
     }
 
     async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
-        let methods = self.dmc.request::<RpcMethods>("rpc_methods", None).await?;
+        let methods = self
+            .dmc
+            .request::<RpcMethods>("rpc_methods", rpc_params![])
+            .await?;
 
         Ok(methods)
     }
@@ -538,7 +452,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     /// Subscription methods must not be `async`, this is ruled in marco generation.
     fn subscribe_storage(
         &self,
-        mut sink: SubscriptionSink,
+        sink: SubscriptionSink,
         keys: Option<Vec<StorageKey>>,
     ) -> SubscriptionResult {
         Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(
@@ -549,38 +463,38 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         )?)
     }
 
-    fn subscribe_runtime_version(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+    fn subscribe_runtime_version(&self, sink: SubscriptionSink) -> SubscriptionResult {
         Ok(self.sub_clients.subscribe::<sp_version::RuntimeVersion>(
             sink,
             "state_subscribeRuntimeVersion",
-            None,
+            rpc_params![],
             "state_unsubscribeRuntimeVersion",
         )?)
     }
 
-    fn subscribe_all_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+    fn subscribe_all_heads(&self, sink: SubscriptionSink) -> SubscriptionResult {
         Ok(self.sub_clients.subscribe::<Header>(
             sink,
             "chain_subscribeAllHeads",
-            None,
+            rpc_params![],
             "chain_unsubscribeAllHeads",
         )?)
     }
 
-    fn subscribe_new_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+    fn subscribe_new_heads(&self, sink: SubscriptionSink) -> SubscriptionResult {
         Ok(self.sub_clients.subscribe::<Header>(
             sink,
             "chain_subscribeNewHeads",
-            None,
+            rpc_params![],
             "chain_unsubscribeNewHeads",
         )?)
     }
 
-    fn subscribe_finalized_heads(&self, mut sink: SubscriptionSink) -> SubscriptionResult {
+    fn subscribe_finalized_heads(&self, sink: SubscriptionSink) -> SubscriptionResult {
         Ok(self.sub_clients.subscribe::<Header>(
             sink,
             "chain_subscribeFinalizedHeads",
-            None,
+            rpc_params![],
             "chain_unsubscribeFinalizedHeads",
         )?)
     }

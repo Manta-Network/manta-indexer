@@ -1,0 +1,78 @@
+{
+	"relaychain": {
+		"bin": "polkadot",
+		"chain": "rococo-local",
+		"nodes": [
+			{
+				"name": "alice",
+				"wsPort": 9944,
+				"port": 30444,
+				"flags": [
+					"--unsafe-ws-external",
+					"--unsafe-rpc-external",
+					"--rpc-cors=all"
+				]
+			},
+			{
+				"name": "bob",
+				"wsPort": 9955,
+				"port": 30555,
+				"flags": [
+					"--unsafe-ws-external",
+					"--unsafe-rpc-external",
+					"--rpc-cors=all"
+				]
+			},
+			{
+				"name": "charlie",
+				"wsPort": 9966,
+				"port": 30666,
+				"flags": [
+					"--unsafe-ws-external",
+					"--unsafe-rpc-external",
+					"--rpc-cors=all"
+				]
+			}
+		],
+		"genesis": {
+			"runtime": {
+				"runtime_genesis_config": {
+					"configuration": {
+						"config": {
+							"validation_upgrade_frequency": 10,
+							"validation_upgrade_delay": 10
+						}
+					}
+				}
+			}
+		}
+	},
+	"parachains": [
+		{
+			"bin": "manta",
+			"chain": "dolphin-dev",
+			"id": "2084",
+			"nodes": [
+				{
+					"wsPort": 9800,
+					"port": 31200,
+					"rpcPort": 9967,
+					"name": "alice",
+					"flags": [
+						"--unsafe-ws-external",
+						"--unsafe-rpc-external",
+						"--rpc-cors=all",
+						"--rpc-max-response-size=100",
+						"--rpc-max-request-size=100",
+						"--",
+						"--execution=wasm"
+					]
+				}
+			]
+		}
+	],
+	"hrmpChannels": [],
+	"simpleParachains": [],
+	"types": {},
+	"finalization": false
+}

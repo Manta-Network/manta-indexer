@@ -6,7 +6,7 @@
   "license": "GPL-3.0",
   "private": true,
   "scripts": {
-    "test": "mocha -r ts-node/register src/test-rpc-relaying.ts"
+    "test": "mocha --timeout 30000 --reporter-options maxDiffSize=8192000 -r ts-node/register src/test-rpc-relaying.ts"
   },
   "dependencies": {
     "@polkadot/api": "^9.6.1",

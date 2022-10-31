@@ -5,12 +5,8 @@ export async function createPromiseApi(nodeAddress: string) {
 
     const api = new ApiPromise({provider: wsProvider});
     await api.isReady;
+    console.log(`${nodeAddress} has bee started` );
     return api;
-}
-
-export interface TestApis {
-    fullNodeApi: ApiPromise;
-    indexerApi: ApiPromise;
 }
 
 export default createPromiseApi;

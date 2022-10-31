@@ -35,13 +35,6 @@ we will rewrite all rpc api that subx contains.
 + [x] system_localListenAddresses
 + [ ] system_peers(block by upstream compiling)
 + [ ] system_unstable_networkState
-+ [x] system_addReservedPeer
-+ [x] system_removeReservedPeer
-+ [x] system_reservedPeers
-+ [ ] system_nodeRoles(block by upstream compiling)
-+ [ ] system_syncState(block by upstream compiling)
-+ [x] system_addLogFilter
-+ [x] system_resetLogFilter
 
 *[Chain API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L27)*
 
@@ -56,10 +49,6 @@ we will rewrite all rpc api that subx contains.
 *[Author API](https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L30)*
 
 + [x] author_submitExtrinsic
-+ [x] author_insertKey
-+ [x] author_rotateKeys
-+ [x] author_hasSessionKeys
-+ [x] author_hasKey
 + [x] author_pendingExtrinsics
 + [ ] author_removeExtrinsic(block by upstream compiling)
 + [ ] author_submitAndWatchExtrinsic(block by upstream compiling)

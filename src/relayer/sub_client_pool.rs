@@ -27,8 +27,7 @@ use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use jsonrpsee::SubscriptionSink;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::future::Future;
-use std::sync::Arc;
+use std::{future::Future, sync::Arc, time::Duration};
 
 type OnceJob = Arc<dyn Send + Sync + Fn() -> std::pin::Pin<Box<dyn Future<Output = ()>>>>;
 
@@ -59,7 +58,12 @@ impl MtoMSubClientPool {
                     let uri = uri.clone();
                     let tx = tx.clone();
                     let f = async move {
-                        let _ = match WsClientBuilder::default().build(uri).await {
+                        // todo, handle the situation while the client disconnects to full node.
+                        let _ = match WsClientBuilder::default()
+                            .connection_timeout(Duration::from_secs(60 * 60 * 24))
+                            .build(uri)
+                            .await
+                        {
                             Ok(client) => tx.send(Ok(Arc::new(client))),
                             Err(e) => tx.send(Err(anyhow!("MtoM client creation fail: {:?}", e))),
                         };

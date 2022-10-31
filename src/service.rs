@@ -69,13 +69,13 @@ pub async fn start_service() -> Result<()> {
 
     let srv_addr = format!("127.0.0.1:{port}");
     let server = WsServerBuilder::new()
-        .max_connections(srv_config.max_connections)
-        .max_request_body_size(srv_config.max_request_body_size)
-        .max_response_body_size(srv_config.max_response_body_size)
-        .ping_interval(srv_config.ping_interval)
-        .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
-        .set_middleware(IndexerMiddleware::default())
-        // .set_middleware(crate::logger::IndexerLogger)
+        // .max_connections(srv_config.max_connections)
+        // .max_request_body_size(srv_config.max_request_body_size)
+        // .max_response_body_size(srv_config.max_response_body_size)
+        // .ping_interval(srv_config.ping_interval)
+        // .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
+        // .set_middleware(IndexerMiddleware::default())
+        .set_middleware(crate::logger::IndexerLogger)
         .build(srv_addr)
         .await?;
 

@@ -55,7 +55,7 @@ impl WsMiddleware for IndexerLogger {
     fn on_response(&self, result: &str, started_at: Self::Instant) {
         println!(
             "[IndexerLogger::on_response] result: {}, time elapsed {:?}",
-            result,
+            result.len(),
             started_at.elapsed()
         );
     }
