@@ -168,10 +168,6 @@ pub trait MantaRelayApi {
     #[method(name = "system_chain")]
     async fn system_chain(&self) -> RpcResult<String>;
 
-    // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L46
-    // #[method(name = "system_chainType")]
-    // async fn system_type(&self) -> RpcResult<sc_chain_spec::ChainType>;
-
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/system/mod.rs#L50
     #[method(name = "system_properties")]
     async fn system_properties(&self) -> RpcResult<Properties>;
@@ -269,7 +265,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     async fn call(&self, name: String, bytes: Bytes, hash: Option<Hash>) -> RpcResult<Bytes> {
         Ok(self
             .dmc
-            .request("state_call", rpc_params!(name, bytes, hash))
+            .request("state_call", rpc_params![name, bytes, hash])
             .await?)
     }
 
@@ -280,7 +276,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     ) -> RpcResult<Vec<(StorageKey, StorageData)>> {
         Ok(self
             .dmc
-            .request("state_getPairs", rpc_params!(prefix, hash))
+            .request("state_getPairs", rpc_params![prefix, hash])
             .await?)
     }
 
@@ -295,7 +291,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .dmc
             .request(
                 "state_getKeysPaged",
-                rpc_params!(prefix, count, start_key, hash),
+                rpc_params![prefix, count, start_key, hash],
             )
             .await?)
     }
@@ -303,21 +299,21 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     async fn storage(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<StorageData>> {
         Ok(self
             .dmc
-            .request("state_getStorage", rpc_params!(key, hash))
+            .request("state_getStorage", rpc_params![key, hash])
             .await?)
     }
 
     async fn storage_hash(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<Hash>> {
         Ok(self
             .dmc
-            .request("state_getStorageHash", rpc_params!(key, hash))
+            .request("state_getStorageHash", rpc_params![key, hash])
             .await?)
     }
 
     async fn storage_size(&self, key: StorageKey, hash: Option<Hash>) -> RpcResult<Option<u64>> {
         Ok(self
             .dmc
-            .request("state_getStorageSize", rpc_params!(key, hash))
+            .request("state_getStorageSize", rpc_params![key, hash])
             .await?)
     }
 
@@ -328,7 +324,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {
         Ok(self
             .dmc
-            .request("state_getRuntimeVersion", rpc_params!(hash))
+            .request("state_getRuntimeVersion", rpc_params![hash])
             .await?)
     }
 
@@ -340,7 +336,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
         Ok(self
             .dmc
-            .request("state_queryStorage", rpc_params!(keys, block, hash))
+            .request("state_queryStorage", rpc_params![keys, block, hash])
             .await?)
     }
 
@@ -351,7 +347,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     ) -> RpcResult<Vec<StorageChangeSet<Hash>>> {
         Ok(self
             .dmc
-            .request("state_queryStorageAt", rpc_params!(keys, at))
+            .request("state_queryStorageAt", rpc_params![keys, at])
             .await?)
     }
 
@@ -366,7 +362,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .dmc
             .request(
                 "state_traceBlock",
-                rpc_params!(block, targets, storage_keys, methods),
+                rpc_params![block, targets, storage_keys, methods],
             )
             .await?)
     }
@@ -397,14 +393,14 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     async fn nonce(&self, account: AccountId) -> RpcResult<Index> {
         Ok(self
             .dmc
-            .request("system_accountNextIndex", rpc_params!(account))
+            .request("system_accountNextIndex", rpc_params![account])
             .await?)
     }
 
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
         Ok(self
             .dmc
-            .request("chain_getHeader", rpc_params!(hash))
+            .request("chain_getHeader", rpc_params![hash])
             .await?)
     }
 
@@ -414,7 +410,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     ) -> RpcResult<ListOrValue<Option<Hash>>> {
         Ok(self
             .dmc
-            .request("chain_getBlockHash", rpc_params!(hash))
+            .request("chain_getBlockHash", rpc_params![hash])
             .await?)
     }
 
@@ -458,7 +454,7 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
         Ok(self.sub_clients.subscribe::<StorageChangeSet<Hash>>(
             sink,
             "state_subscribeStorage",
-            rpc_params!([keys]),
+            rpc_params![keys],
             "state_unsubscribeStorage",
         )?)
     }
