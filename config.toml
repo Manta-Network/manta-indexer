@@ -1,8 +1,8 @@
 [indexer.configuration]
-frequency = 2                          # it means pull shards per 2 seconds, and should not be bigger than 12s.
+frequency = 2 # it means pull shards per 2 seconds, and should not be bigger than 12s.
 port = 7788
 rpc_method = "mantaPay_pull_ledger_diff"
-full_node = "wss://ws.rococo.dolphin.engineering:443"
+full_node = "ws://127.0.0.1:9800"
 
 [server.configuration]
 # all params are default values

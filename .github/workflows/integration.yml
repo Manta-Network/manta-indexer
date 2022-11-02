@@ -10,16 +10,22 @@ jobs:
   build:
     runs-on: ubuntu-20.04
 
+    strategy:
+      matrix:
+        node-version: [16.x, 17.x]
+
     steps:
       - uses: actions/checkout@v2
       - name: Indexer Build
         run: cargo build --release
+      - uses: borales/actions-yarn@v3.0.0
       - uses: actions/checkout@v2
         with:
           repository: paritytech/polkadot-launch
           path: polkadot-launch
       - name: fetch and chmod polkadot
         run: |
+          mkdir $HOME/.local/bin/
           curl -L -o $HOME/.local/bin/polkadot https://github.com/paritytech/polkadot/releases/download/v0.9.26/polkadot
           chmod +x $HOME/.local/bin/polkadot
       - name: fetch and chmod manta
@@ -29,9 +35,8 @@ jobs:
       - name: Start Relaychain Network with Calamari
         run: |
           cd ./polkadot-launch
-          yarn install
           yarn build
-          yarn start ./github/resources/dolphin.json
+          yarn start ./github/resources/dolphin.json &>/dev/null &
       - name: Start Indexer
         run: |
           cd ${{ github.workspace }}
@@ -45,4 +50,4 @@ jobs:
         run: |
           cd tests/integration-tests
           yarn
-          yarn test
+          yarn test-relayer
