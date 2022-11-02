@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [16.x, 17.x]
+        node-version: [16.x]
 
     steps:
       - uses: actions/checkout@v2
@@ -25,7 +25,7 @@ jobs:
           path: polkadot-launch
       - name: fetch and chmod polkadot
         run: |
-          mkdir $HOME/.local/bin/
+          mkdir -p $HOME/.local/bin
           curl -L -o $HOME/.local/bin/polkadot https://github.com/paritytech/polkadot/releases/download/v0.9.26/polkadot
           chmod +x $HOME/.local/bin/polkadot
       - name: fetch and chmod manta
