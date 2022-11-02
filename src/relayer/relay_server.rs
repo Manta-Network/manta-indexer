@@ -25,13 +25,17 @@ use jsonrpsee::{
     ws_client::WsClient,
     SubscriptionSink,
 };
+use sc_transaction_pool_api::TransactionStatus;
 use sp_core::storage::{StorageChangeSet, StorageData, StorageKey};
 use sp_core::Bytes;
 use sp_rpc::{list::ListOrValue, number::NumberOrHex};
+use sp_runtime::generic::SignedBlock;
 use sp_runtime::traits::{BlakeTwo256, IdentifyAccount, Verify};
 use std::sync::Arc;
 
 pub type Hash = sp_core::H256;
+pub type BlockHash = sp_core::H256;
+pub type Block = sp_runtime::generic::Block<Header, sp_runtime::OpaqueExtrinsic>;
 
 /// Arbitrary properties defined in chain spec as a JSON object
 pub type Properties = serde_json::map::Map<String, serde_json::Value>;
@@ -179,6 +183,9 @@ pub trait MantaRelayApi {
     #[method(name = "system_accountNextIndex", aliases = ["account_nextIndex"])]
     async fn nonce(&self, account: AccountId) -> RpcResult<Index>;
 
+    #[method(name = "chain_getBlock")]
+    async fn block(&self, hash: Option<Hash>) -> RpcResult<Option<SignedBlock<Block>>>;
+
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/chain/mod.rs#L28
     #[method(name = "chain_getHeader")]
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>>;
@@ -254,6 +261,13 @@ pub trait MantaRelayApi {
         item = Header
     )]
     fn subscribe_finalized_heads(&self);
+
+    #[subscription(
+		name = "author_submitAndWatchExtrinsic" => "author_extrinsicUpdate",
+		unsubscribe = "author_unwatchExtrinsic",
+		item = TransactionStatus<Hash, BlockHash>,
+	)]
+    fn watch_extrinsic(&self, bytes: Bytes);
 }
 
 #[async_trait]
@@ -397,6 +411,13 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .await?)
     }
 
+    async fn block(&self, hash: Option<Hash>) -> RpcResult<Option<SignedBlock<Block>>> {
+        Ok(self
+            .dmc
+            .request("chain_getBlock", rpc_params![hash])
+            .await?)
+    }
+
     async fn header(&self, hash: Option<Hash>) -> RpcResult<Option<Header>> {
         Ok(self
             .dmc
@@ -493,6 +514,17 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             rpc_params![],
             "chain_unsubscribeFinalizedHeads",
         )?)
+    }
+
+    fn watch_extrinsic(&self, sink: SubscriptionSink, bytes: Bytes) -> SubscriptionResult {
+        Ok(self
+            .sub_clients
+            .subscribe::<TransactionStatus<Hash, BlockHash>>(
+                sink,
+                "author_submitAndWatchExtrinsic",
+                rpc_params![bytes],
+                "author_unwatchExtrinsic",
+            )?)
     }
 }
 

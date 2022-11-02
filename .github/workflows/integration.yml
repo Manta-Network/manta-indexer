@@ -11,32 +11,38 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Indexer Build
-      run: cargo build --release
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+      - name: Indexer Build
+        run: cargo build --release
+      - uses: actions/checkout@v2
         with:
           repository: paritytech/polkadot-launch
           path: polkadot-launch
-    - name: fetch and chmod polkadot
+      - name: fetch and chmod polkadot
         run: |
           curl -L -o $HOME/.local/bin/polkadot https://github.com/paritytech/polkadot/releases/download/v0.9.26/polkadot
           chmod +x $HOME/.local/bin/polkadot
-    - name: fetch and chmod manta
+      - name: fetch and chmod manta
         run: |
           curl -L -o $HOME/.local/bin/manta https://github.com/Manta-Network/Manta/releases/download/v3.4.3/manta
           chmod +x $HOME/.local/bin/manta
-    - name: Start Relaychain Network with Calamari and Indexer
-      run: |
-        cd ./polkadot-launch
-        yarn install
-        yarn build
-        yarn start dolphin.json
-    - name: Check Block Production
-      run: |
-        yarn block-production
-    - name: Run Integration Test
-      run: |
-        cd tests/integration-tests
-        yarn
-        yarn test
+      - name: Start Relaychain Network with Calamari
+        run: |
+          cd ./polkadot-launch
+          yarn install
+          yarn build
+          yarn start ./github/resources/dolphin.json
+      - name: Start Indexer
+        run: |
+          cd ${{ github.workspace }}
+          ./target/release/manta-indexer &>/dev/null &
+      - name: Check Block Production
+        run: |
+          cd ./tests/integration-tests
+          yarn
+          yarn block-production
+      - name: Run Integration Test
+        run: |
+          cd tests/integration-tests
+          yarn
+          yarn test
