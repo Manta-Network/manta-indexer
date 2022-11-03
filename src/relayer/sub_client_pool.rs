@@ -18,15 +18,18 @@ use anyhow::anyhow;
 use dashmap::DashMap;
 use frame_support::log::{error, trace};
 use futures::StreamExt;
-use jsonrpsee::async_client::Client;
-use jsonrpsee::core::client::SubscriptionClientT;
-use jsonrpsee::core::error::SubscriptionClosed;
-use jsonrpsee::core::server::rpc_module::{ConnectionId, SubscriptionKey};
-use jsonrpsee::types::{ErrorObjectOwned, ParamsSer};
-use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use jsonrpsee::SubscriptionSink;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use jsonrpsee::{
+    async_client::Client,
+    core::{
+        client::SubscriptionClientT,
+        error::SubscriptionClosed,
+        server::rpc_module::{ConnectionId, SubscriptionKey},
+    },
+    types::{ErrorObjectOwned, ParamsSer},
+    ws_client::{WsClient, WsClientBuilder},
+    SubscriptionSink,
+};
+use serde::{Deserialize, Serialize};
 use std::{future::Future, sync::Arc, time::Duration};
 
 type OnceJob = Arc<dyn Send + Sync + Fn() -> std::pin::Pin<Box<dyn Future<Output = ()>>>>;
@@ -100,7 +103,7 @@ impl MtoMSubClientPool {
         unsub_method: &'static str,
     ) -> anyhow::Result<()>
     where
-        N: DeserializeOwned + Serialize + Send + 'static,
+        N: for<'de> Deserialize<'de> + Serialize + Send + 'static,
     {
         // we need firstly accept the subscription from upstream, then we can get the sub_keys.
         let _ = sink.accept();
@@ -133,12 +136,7 @@ impl MtoMSubClientPool {
 
         let sub_channel = rx.recv()??;
         // here means downstream subscription has been built successfully.
-        let sub_channel = sub_channel.filter_map(|msg| async {
-            match msg {
-                Ok(m) => Some(m),
-                Err(e) => None,
-            }
-        });
+        let sub_channel = sub_channel.filter_map(|msg| async { msg.ok() });
         let sub_channel = Box::pin(sub_channel);
 
         tokio::spawn(async move {

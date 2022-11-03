@@ -36,6 +36,10 @@ async fn main() -> Result<()> {
     // utils::init_logger();
     log4rs::init_file("conf/log.yaml", Default::default())?;
 
-    service::start_service().await?;
+    let _handler = service::start_service().await?;
+    // todo, shutdown server gracefully.
+    // if ctr + c {
+    //     handler.stop()?;
+    // }
     futures::future::pending().await
 }

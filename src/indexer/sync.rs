@@ -28,7 +28,7 @@ use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio_stream::StreamExt;
-use tracing::{debug, info, instrument};
+use tracing::instrument;
 
 #[instrument]
 pub async fn synchronize_shards(
@@ -88,7 +88,6 @@ pub async fn sync_shards_from_full_node(
 
     let mut next_checkpoint = current_checkpoint;
     loop {
-        let now = Instant::now();
         let resp = synchronize_shards(
             &client,
             &next_checkpoint,
@@ -141,7 +140,7 @@ pub async fn sync_shards_from_full_node(
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
+        current_checkpoint = next_checkpoint;
     }
 
     Ok(())
@@ -214,8 +213,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
-        // current_checkpoint = next_checkpoint;
+        current_checkpoint = next_checkpoint;
         times += 1;
         println!("times: {}", times);
     }
@@ -266,8 +264,7 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
-        // current_checkpoint = next_checkpoint;
+        current_checkpoint = next_checkpoint;
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
@@ -308,7 +305,7 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint.clone();
+        current_checkpoint = next_checkpoint;
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;

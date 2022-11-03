@@ -21,7 +21,7 @@ use jsonrpsee::{
     core::{async_trait, client::ClientT, RpcResult},
     proc_macros::rpc,
     rpc_params,
-    types::{EmptyParams, SubscriptionResult},
+    types::SubscriptionResult,
     ws_client::WsClient,
     SubscriptionSink,
 };
@@ -332,7 +332,10 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn metadata(&self, hash: Option<Hash>) -> RpcResult<Bytes> {
-        Ok(self.dmc.request("state_getMetadata", rpc_params![]).await?)
+        Ok(self
+            .dmc
+            .request("state_getMetadata", rpc_params![hash])
+            .await?)
     }
 
     async fn runtime_version(&self, hash: Option<Hash>) -> RpcResult<sp_version::RuntimeVersion> {

@@ -27,7 +27,6 @@ pub mod middleware;
 pub mod relay_server;
 mod sub_client_pool;
 
-use anyhow::{bail, Result};
 use jsonrpsee::core::TEN_MB_SIZE_BYTES;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

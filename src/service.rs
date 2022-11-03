@@ -16,14 +16,13 @@
 
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
 use crate::relayer::{
-    middleware::IndexerMiddleware,
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
     WsServerConfig,
 };
 use anyhow::Result;
-use jsonrpsee::ws_server::WsServerBuilder;
+use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 
-pub async fn start_service() -> Result<()> {
+pub async fn start_service() -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
 
     let config = crate::utils::read_config()?;
@@ -44,7 +43,7 @@ pub async fn start_service() -> Result<()> {
     let port = config["indexer"]["configuration"]["port"]
         .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
-    let frequency = config["indexer"]["configuration"]["frequency"]
+    let _frequency = config["indexer"]["configuration"]["frequency"]
         .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
 
@@ -55,7 +54,6 @@ pub async fn start_service() -> Result<()> {
     let content = crate::utils::read_config()?;
     let config = content["server"]["configuration"].to_string();
     let srv_config: WsServerConfig = toml::from_str(&config)?;
-    let client = crate::utils::create_ws_client(full_node).await?;
 
     let mut available_methods = module.method_names().collect::<Vec<_>>();
     available_methods.sort_unstable();
@@ -69,17 +67,17 @@ pub async fn start_service() -> Result<()> {
 
     let srv_addr = format!("127.0.0.1:{port}");
     let server = WsServerBuilder::new()
-        // .max_connections(srv_config.max_connections)
-        // .max_request_body_size(srv_config.max_request_body_size)
-        // .max_response_body_size(srv_config.max_response_body_size)
-        // .ping_interval(srv_config.ping_interval)
-        // .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
+        .max_connections(srv_config.max_connections)
+        .max_request_body_size(srv_config.max_request_body_size)
+        .max_response_body_size(srv_config.max_response_body_size)
+        .ping_interval(srv_config.ping_interval)
+        .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
         // .set_middleware(IndexerMiddleware::default())
         .set_middleware(crate::logger::IndexerLogger)
         .build(srv_addr)
         .await?;
 
-    let addr = server.local_addr()?;
+    let _addr = server.local_addr()?;
     let handle = server.start(module)?;
-    Ok(())
+    Ok(handle)
 }

@@ -119,7 +119,7 @@ pub async fn insert_one_shard(
 
     let mut conn = pool.acquire().await?;
     let mut tx = conn.begin().await?;
-    let row_at =
+    let _row_at =
         sqlx::query("INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3);")
             .bind(shard_index)
             .bind(n)
@@ -140,7 +140,7 @@ pub async fn insert_one_void_number(
     let n = vn_index as i64;
 
     let mut conn = pool.acquire().await?;
-    let row_at = sqlx::query("INSERT INTO void_number (idx, vn) VALUES (?1, ?2)")
+    let _row_at = sqlx::query("INSERT INTO void_number (idx, vn) VALUES (?1, ?2)")
         .bind(n)
         .bind(encoded_vn)
         .execute(&mut conn)

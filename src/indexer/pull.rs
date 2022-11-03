@@ -21,7 +21,7 @@ use codec::Decode;
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
-use tracing::{debug, info, instrument};
+use tracing::{debug, instrument};
 
 /// Calculate the next checkpoint.
 pub fn calculate_next_checkpoint(
@@ -149,7 +149,7 @@ pub async fn pull_ledger_diff(
     let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await? as u128;
 
     Ok(PullResponse {
-        should_continue: more_receivers,
+        should_continue: more_receivers || more_senders,
         receivers,
         senders,
         senders_receivers_total,
