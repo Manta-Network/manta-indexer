@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let _handler = service::start_service().await?;
     // todo, shutdown server gracefully.
     // if ctr + c {
-    //     handler.stop()?;
+    //     handler.stop().await?;
     // }
     futures::future::pending().await
 }

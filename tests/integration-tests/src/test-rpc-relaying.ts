@@ -91,41 +91,6 @@ describe("Relaying non subscription rpc methods", function () {
     );
   });
 
-  // author_submitExtrinsic
-  it.skip("Submitting signed transaction payload should work", async function () {
-    // make a transfer
-    const keyring = new Keyring({ type: "sr25519", ss58Format: 78 });
-    const aliceSeed = "//Alice";
-    const alice = keyring.addFromUri(aliceSeed);
-
-    const bobSeed = "//Bob";
-    const bob = keyring.addFromUri(bobSeed);
-
-    // transfer 10 tokens from alice to bob
-    const amount = 10;
-    const decimal = indexerApi.registry.chainDecimals;
-    const factor = new BN(10).pow(new BN(decimal));
-    const toTransfer = new BN(amount).mul(factor);
-
-    const indexerBlockHash = await indexerApi.rpc.chain.getBlockHash();
-    const nonce = await indexerApi.rpc.system.accountNextIndex(alice.address);
-
-    const aliceToBobExtrinsic = indexerApi.tx.balances
-      .transferKeepAlive(bob.address, toTransfer)
-      .sign(alice, {
-        blockHash: indexerBlockHash,
-        genesisHash: indexerApi.genesisHash,
-        nonce,
-        runtimeVersion: indexerApi.runtimeVersion,
-      });
-    console.log(aliceToBobExtrinsic.toString());
-
-    const blockHash = await indexerApi.rpc.author.submitExtrinsic(
-      aliceToBobExtrinsic
-    );
-    console.log(blockHash);
-  });
-
   // rpc_methods
   it("should return a rpc methods list", async function () {
     const fullNodeRpcMethods = await fullNodeApi.rpc.rpc.methods();
@@ -163,7 +128,7 @@ describe("Relaying non subscription rpc methods", function () {
       indexerMetdata.asV14.toString()
     );
 
-    // feeding a specified block hash should work as well, x
+    // feeding a specified block hash should work as well
     const at = await fullNodeApi.rpc.chain.getHeader();
     const _fullNodeMetdata = await fullNodeApi.rpc.state.getMetadata(at.hash);
     const _indexerMetdata = await indexerApi.rpc.state.getMetadata(at.hash);
@@ -202,8 +167,8 @@ describe("Relaying non subscription rpc methods", function () {
     );
 
     // feeding a specified block hash should work as well
-    const at = "";
-    const nodeBlockHash = await fullNodeApi.rpc.chain.getBlockHash(at);
+    const at = await fullNodeApi.rpc.chain.getHeader();
+    const nodeBlockHash = await fullNodeApi.rpc.chain.getBlockHash(at.hash);
     const _fullNodeRuntimetVersion =
       await fullNodeApi.rpc.state.getRuntimeVersion(nodeBlockHash);
     const _indexerRuntimetVersion =
@@ -302,7 +267,6 @@ describe("Relaying non subscription rpc methods", function () {
           );
           assert.isTrue(result.status.asFinalized);
           console.log("Unsubscribe the rpc method.");
-          // unsub();
         }
       });
     setTimeout(() => {
