@@ -48,7 +48,7 @@ describe("Relaying non subscription rpc methods", function () {
   });
 
   // chain_getHeader
-  it("should return a block hash", async function () {
+  it("should return a block header", async function () {
     const nodeBlockHeader = await fullNodeApi.rpc.chain.getHeader();
     const indexerBlockHeader = await indexerApi.rpc.chain.getHeader();
     assert.equal(

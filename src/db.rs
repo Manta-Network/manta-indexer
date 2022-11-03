@@ -31,8 +31,7 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
     let m = Migrator::new(Path::new("./migrations")).await?;
 
     // ensure the db exists.
-    // assert!(Sqlite::database_exists(&db_url).await?);
-    if let Err(_) = sqlx::sqlite::Sqlite::database_exists(db_url).await {
+    if let Err(_) | Ok(false) = sqlx::sqlite::Sqlite::database_exists(db_url).await {
         sqlx::sqlite::CREATE_DB_WAL.store(true, std::sync::atomic::Ordering::Release);
         assert!(sqlx::sqlite::Sqlite::create_database(db_url).await.is_ok());
     }

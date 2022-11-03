@@ -15,5 +15,5 @@ batch_requests_supported = true
 ping_interval = 60 # in second
 
 [db.configuration]
-db_path = "dolphin-shards.db"
+db_path = "indexer.db"
 pool_size = 16

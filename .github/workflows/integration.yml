@@ -16,38 +16,39 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Indexer Build
-        run: cargo build --release
       - uses: borales/actions-yarn@v3.0.0
       - uses: actions/checkout@v2
         with:
           repository: paritytech/polkadot-launch
           path: polkadot-launch
-      - name: fetch and chmod polkadot
+      - name: Install pm2
+        run: npm install -g pm2
+      - name: Get polkadot
         run: |
-          mkdir -p $HOME/.local/bin
-          curl -L -o $HOME/.local/bin/polkadot https://github.com/paritytech/polkadot/releases/download/v0.9.26/polkadot
-          chmod +x $HOME/.local/bin/polkadot
-      - name: fetch and chmod manta
+          curl -L -o ${{ github.workspace }}/.github/resources/polkadot https://github.com/paritytech/polkadot/releases/download/v0.9.26/polkadot
+          chmod +x ${{ github.workspace }}/.github/resources/polkadot
+      - name: Get manta
         run: |
-          curl -L -o $HOME/.local/bin/manta https://github.com/Manta-Network/Manta/releases/download/v3.4.3/manta
-          chmod +x $HOME/.local/bin/manta
-      - name: Start Relaychain Network with Calamari
+          curl -L -o ${{ github.workspace }}/.github/resources/manta https://github.com/Manta-Network/Manta/releases/download/v3.4.3/manta
+          chmod +x ${{ github.workspace }}/.github/resources/manta
+      - name: Start Relaychain Network with Dolphin
         run: |
-          cd ./polkadot-launch
+          cd ${{ github.workspace }}/polkadot-launch
+          yarn
           yarn build
-          yarn start ./github/resources/dolphin.json &>/dev/null &
-      - name: Start Indexer
+          pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin.json
+      - name: Build and Start Indexer 
         run: |
           cd ${{ github.workspace }}
-          ./target/release/manta-indexer &>/dev/null &
+          cargo build --release
+          pm2 start --name manta-indexer ${{ github.workspace }}/target/release/manta-indexer
       - name: Check Block Production
         run: |
-          cd ./tests/integration-tests
+          cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn block-production
       - name: Run Integration Test
         run: |
-          cd tests/integration-tests
+          cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn test-relayer
