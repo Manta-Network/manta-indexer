@@ -2,7 +2,8 @@ import { assert } from "chai";
 import { Keyring } from "@polkadot/keyring";
 import { BN } from "@polkadot/util";
 import { ApiPromise } from "@polkadot/api";
-import { createPromiseApi } from "./utils";
+import "@polkadot/api-augment";
+import { createPromiseApi, delay } from "./utils";
 import { dolphinFullNode, indexerAddress } from "./config.json";
 import { StorageChangeSet } from "@polkadot/types/interfaces";
 
@@ -168,7 +169,9 @@ describe("Relaying non subscription rpc methods", function () {
 
     // feeding a specified block hash should work as well
     const at = await fullNodeApi.rpc.chain.getHeader();
-    const nodeBlockHash = await fullNodeApi.rpc.chain.getBlockHash(at.hash);
+    const nodeBlockHash = await fullNodeApi.rpc.chain.getBlockHash(
+      at.number.toNumber() - 1
+    );
     const _fullNodeRuntimetVersion =
       await fullNodeApi.rpc.state.getRuntimeVersion(nodeBlockHash);
     const _indexerRuntimetVersion =
@@ -248,6 +251,10 @@ describe("Relaying non subscription rpc methods", function () {
     const bobSeed = "//Bob";
     const bob = keyring.addFromUri(bobSeed);
 
+    const {
+      data: { free: bobPreviousFree },
+    } = await indexerApi.query.system.account(bob.address);
+
     // transfer 10 tokens from alice to bob
     const amount = 10;
     const decimal = indexerApi.registry.chainDecimals;
@@ -269,10 +276,12 @@ describe("Relaying non subscription rpc methods", function () {
           console.log("Unsubscribe the rpc method.");
         }
       });
-    setTimeout(() => {
-      unsub();
-      console.log("Unsubscribed");
-    }, 30000);
+    await delay(30000);
+    const {
+      data: { free: bobCurrentFree },
+    } = await indexerApi.query.system.account(bob.address);
+    const transfered = bobCurrentFree.toBigInt() - bobPreviousFree.toBigInt();
+    assert.equal(transfered.toString(), toTransfer.toString());
   });
 
   after(async function () {

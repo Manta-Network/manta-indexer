@@ -20,4 +20,8 @@ export async function createPromiseApi(nodeAddress: string) {
   return api;
 }
 
+export async function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default createPromiseApi;
