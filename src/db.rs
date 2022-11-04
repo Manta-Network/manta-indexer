@@ -280,7 +280,6 @@ async fn clean_up(conn: &mut SqlitePool, table_name: &str) -> Result<()> {
 mod tests {
     use super::*;
     use crate::types::Shard;
-    use codec::Encode;
     use sqlx::migrate::MigrateDatabase;
 
     #[tokio::test]
@@ -423,7 +422,7 @@ mod tests {
 
         let pool = initialize_db_pool(db_url, 16).await;
         assert!(pool.is_ok());
-        let mut pool = pool.unwrap();
+        let pool = pool.unwrap();
 
         let i = 1;
         let vn = [1u8; 32];
@@ -470,7 +469,7 @@ mod tests {
 
         let pool = initialize_db_pool(db_url, 16).await;
         assert!(pool.is_ok());
-        let mut pool = pool.unwrap();
+        let pool = pool.unwrap();
 
         // insert total senders_receivers first
         let new_total = 100;
@@ -485,14 +484,18 @@ mod tests {
         assert_eq!(val, new_total);
 
         // update the same total value
-        update_or_insert_total_senders_receivers(&pool, new_total).await;
+        assert!(update_or_insert_total_senders_receivers(&pool, new_total)
+            .await
+            .is_ok());
         let val = get_total_senders_receivers(&pool).await;
         assert!(val.is_ok());
         let val = val.unwrap();
         assert_eq!(val, new_total);
 
         let new_total_1 = new_total + 50;
-        update_or_insert_total_senders_receivers(&pool, new_total_1).await;
+        assert!(update_or_insert_total_senders_receivers(&pool, new_total_1)
+            .await
+            .is_ok());
         let val_1 = get_total_senders_receivers(&pool).await;
         assert!(val_1.is_ok());
         let val_1 = val_1.unwrap();

@@ -314,11 +314,9 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
 mod tests {
     use super::*;
     use crate::db;
-    use codec::Encode;
-    use std::mem;
-    use std::time::{Duration, Instant};
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos."]
     async fn bench_pull_ledger_diff_from_sqlite() {
         let db_path = "latest-dolphin-shards.db";
         let pool_size = 16u32;
@@ -328,32 +326,24 @@ mod tests {
         let pool = pool.unwrap();
 
         let mut sum = 0f32;
-        for i in 0..5 {
+        for _i in 0..5 {
             sum += pull_ledger_diff_from_sqlite(&pool).await.unwrap();
         }
         println!("time cost: {} second", sum / 5f32);
     }
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos."]
     async fn bench_pull_shards_from_local_node() {
         let mut sum = 0f32;
-        for i in 0..3 {
+        for _i in 0..3 {
             sum += pull_ledger_diff_from_local_node().await.unwrap();
         }
         println!("time cost: {} second", sum / 3f32);
     }
 
     #[tokio::test]
-    async fn wss_dummy_test() {
-        crate::utils::init_logger();
-
-        let url = "wss://falafel.calamari.systems:443";
-        let client = crate::utils::create_ws_client(url).await.unwrap();
-        let response: String = client.request("system_chain", None).await.unwrap();
-        assert_eq!(&response, "Calamari Parachain");
-    }
-
-    #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos."]
     async fn pull_ledger_diff_should_work() {
         let url = "wss://ws.rococo.dolphin.engineering:443";
         let client = crate::utils::create_ws_client(url).await.unwrap();
@@ -365,20 +355,6 @@ mod tests {
         let resp =
             synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
         assert!(resp.unwrap().should_continue);
-    }
-
-    #[tokio::test]
-    async fn test_pull_all_shards_to_db() {
-        let db_path = "latest-dolphin-shards-bk.db";
-        let pool_size = 16u32;
-        let pool = db::initialize_db_pool(db_path, pool_size).await;
-        assert!(pool.is_ok());
-
-        let pool = pool.unwrap();
-        let url = "ws://127.0.0.1:9973";
-
-        let r = pull_all_shards_to_db(&pool, url).await;
-        dbg!(r);
     }
 
     #[tokio::test]
@@ -396,10 +372,8 @@ mod tests {
         assert!(resp.should_continue);
         let shards = reconstruct_shards_from_pull_response(&resp).unwrap();
 
-        let length = shards.len();
         for (k, shard) in shards.iter() {
             for sh in shard.iter() {
-                // if *k as usize + 1 >= length {
                 println!(
                     "k: {}, utxo: {:?}, ephemeral_public_key: {:?}, ciphertext: {:?}",
                     k,
@@ -407,7 +381,6 @@ mod tests {
                     hex::encode(sh.1.ephemeral_public_key),
                     hex::encode(sh.1.ciphertext)
                 );
-                // }
             }
         }
 

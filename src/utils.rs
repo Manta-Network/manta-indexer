@@ -174,8 +174,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "todo, use local node for testing."]
     async fn get_node_role_should_work() {
-        let url = "wss://falafel.calamari.systems:443"; // It's a full node
+        let url = "wss://ws.calamari.systems/:443"; // It's a lb endpoint
         let ws = create_ws_client(url)
             .await
             .expect("failed to create ws client.");
@@ -183,6 +184,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "todo, use local node for testing."]
     async fn pull_rpc_method_must_exist() {
         let config = read_config().unwrap();
         let rpc_method = config["configuration"]["rpc-method"].as_str().unwrap();

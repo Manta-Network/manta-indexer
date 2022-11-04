@@ -155,8 +155,3 @@ pub async fn pull_ledger_diff(
         senders_receivers_total,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-}

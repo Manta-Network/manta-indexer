@@ -85,6 +85,6 @@ mod tests {
 
         let config = config.unwrap();
         assert_eq!(config.max_request_body_size, 10);
-        assert_eq!(config.ping_interval, Duration::from_secs(60));
+        assert_eq!(config.ping_interval, Duration::from_secs(30));
     }
 }

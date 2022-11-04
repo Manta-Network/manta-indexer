@@ -542,14 +542,3 @@ impl MantaRpcRelayServer {
         Ok(relayer)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn get_metadata_should_work() {
-        let url = "wss://ws.calamari.systems:443";
-        assert!(true);
-    }
-}
