@@ -283,6 +283,7 @@ mod tests {
     use sqlx::migrate::MigrateDatabase;
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn do_migration_should_work() {
         let db_path = "dolphin-shards.db";
         let pool_size = 16u32;
@@ -291,6 +292,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn get_one_shard_should_work() {
         let db_path = "dolphin-shards.db";
         let pool_size = 16u32;
@@ -309,6 +311,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn has_shard_should_work() {
         let db_path = "dolphin-shards.db";
         let pool_size = 16u32;
@@ -328,6 +331,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn get_batched_shards_should_work() {
         let db_path = "dolphin-shards.db";
         let pool_size = 16u32;
@@ -393,6 +397,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn get_latest_check_point_should_work() {
         let db_path = "dolphin-shards.db";
         let pool_size = 16u32;
