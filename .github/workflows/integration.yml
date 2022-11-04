@@ -1,0 +1,54 @@
+name: Integration Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    strategy:
+      matrix:
+        node-version: [16.x]
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: borales/actions-yarn@v3.0.0
+      - uses: actions/checkout@v2
+        with:
+          repository: paritytech/polkadot-launch
+          path: polkadot-launch
+      - name: Install pm2
+        run: npm install -g pm2
+      - name: Get polkadot
+        run: |
+          curl -L -o ${{ github.workspace }}/.github/resources/polkadot https://github.com/paritytech/polkadot/releases/download/v0.9.26/polkadot
+          chmod +x ${{ github.workspace }}/.github/resources/polkadot
+      - name: Get manta
+        run: |
+          curl -L -o ${{ github.workspace }}/.github/resources/manta https://github.com/Manta-Network/Manta/releases/download/v3.4.3/manta
+          chmod +x ${{ github.workspace }}/.github/resources/manta
+      - name: Start Relaychain Network with Dolphin
+        run: |
+          cd ${{ github.workspace }}/polkadot-launch
+          yarn
+          yarn build
+          pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin.json
+      - name: Build and Start Indexer 
+        run: |
+          cd ${{ github.workspace }}
+          cargo build --release
+          pm2 start --name manta-indexer ${{ github.workspace }}/target/release/manta-indexer
+      - name: Check Block Production
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn block-production
+      - name: Run Integration Test
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn test-relayer

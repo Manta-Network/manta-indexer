@@ -1,0 +1,4 @@
+{
+  "dolphinFullNode": "ws://127.0.0.1:9800",
+  "indexerAddress": "ws://127.0.0.1:7788"
+}

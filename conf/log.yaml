@@ -1,0 +1,28 @@
+# Scan this file for changes every 30 seconds
+refresh_rate: 30 seconds
+
+appenders:
+  # An appender named "stdout" that writes to stdout
+  stdout:
+    kind: console
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {l} {f}:{L} - {m}{n}"
+
+  log_app:
+    kind: rolling_file
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 5Gb
+      roller:
+        kind: delete
+    append: false
+    path: "logs/app.log"
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {l} {f}:{L} - {m}{n}"
+
+root:
+  level: trace
+  appenders:
+    - log_app
