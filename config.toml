@@ -6,14 +6,14 @@ full_node = "ws://127.0.0.1:9800"
 
 [server.configuration]
 # all params are default values from substrate
-max_request_body_size = 10485760 # 10 MB 
-max_response_body_size = 10485760 # 10 MB 
-max_connections = 100
+max_request_body_size = 10 # 10 MB 
+max_response_body_size = 10 # 10 MB 
+max_connections = 1000
 max_subscriptions_per_connection = 1024
 max_log_length = 4096
 batch_requests_supported = true
 ping_interval = 30 # in second
 
 [db.configuration]
-db_path = "indexer.db"
+db_path = "latest-dolphin-shards.db"
 pool_size = 16

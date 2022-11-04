@@ -229,8 +229,8 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
     let client = crate::utils::create_ws_client(url).await?;
 
     let mut current_checkpoint = Checkpoint::default();
-    // let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
-    let (max_sender_count, max_receiver_count) = (1024, 1024);
+    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+    // let (max_sender_count, max_receiver_count) = (1024, 1024);
 
     let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
@@ -238,7 +238,6 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
     println!("========================");
     loop {
         let now = Instant::now();
-        dbg!(1);
         let resp = synchronize_shards(
             &client,
             &next_checkpoint,
@@ -246,7 +245,6 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
             max_receiver_count,
         )
         .await?;
-        dbg!(10);
         let shards = reconstruct_shards_from_pull_response(&resp)?;
 
         super::pull::calculate_next_checkpoint(
@@ -294,14 +292,12 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         .await?;
 
         let shards = reconstruct_shards_from_pull_response(&resp)?;
-        // super::pull::calculate_next_checkpoint(&shards, &current_checkpoint, &mut next_checkpoint, resp.receivers.len());
         super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
             resp.receivers.len(),
         );
-        // println!("next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}", next_checkpoint, resp.receivers.len(), resp.senders_receivers_total);
         if !resp.should_continue {
             break;
         }
@@ -344,7 +340,7 @@ mod tests {
         for i in 0..3 {
             sum += pull_ledger_diff_from_local_node().await.unwrap();
         }
-        println!("time cost: {} second", sum / 10f32);
+        println!("time cost: {} second", sum / 3f32);
     }
 
     #[tokio::test]
@@ -364,11 +360,10 @@ mod tests {
 
         let mut checkpoint = Checkpoint::default();
         checkpoint.sender_index = 0usize;
-        let (max_sender_count, max_receiver_count) = (1024 * 100, 1024 * 100);
+        let (max_sender_count, max_receiver_count) = (1024 * 10, 1024 * 10);
 
         let resp =
             synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
-        assert!(&resp.is_ok());
         assert!(resp.unwrap().should_continue);
     }
 
@@ -397,7 +392,6 @@ mod tests {
 
         let resp =
             synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
-        // assert!(&resp.is_ok());
         let resp = resp.unwrap();
         assert!(resp.should_continue);
         let shards = reconstruct_shards_from_pull_response(&resp).unwrap();

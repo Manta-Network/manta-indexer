@@ -26,3 +26,5 @@ pub const PULL_MAX_RECEIVER_UPDATE_SIZE: u64 = 32768;
 
 pub const VOID_NUMBER_TBALE_NAME: &str = "void_number";
 pub const SHARD_TBALE_NAME: &str = "shard";
+
+pub const MEGABYTE: u32 = 1024 * 1024;

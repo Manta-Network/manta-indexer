@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::constants::MEGABYTE;
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
 use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
@@ -68,8 +69,8 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let srv_addr = format!("127.0.0.1:{port}");
     let server = WsServerBuilder::new()
         .max_connections(srv_config.max_connections)
-        .max_request_body_size(srv_config.max_request_body_size)
-        .max_response_body_size(srv_config.max_response_body_size)
+        .max_request_body_size(srv_config.max_request_body_size * MEGABYTE)
+        .max_response_body_size(srv_config.max_response_body_size * MEGABYTE)
         .ping_interval(srv_config.ping_interval)
         .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
         // .set_middleware(IndexerMiddleware::default())
