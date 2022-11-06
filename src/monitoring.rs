@@ -104,6 +104,9 @@ impl WsMiddleware for IndexerMiddleware {
             success,
             started_at.elapsed().as_millis()
         );
+        TOTAL_RELAYING_COUNTER
+            .with_label_values(&[name, &success.to_string()])
+            .inc();
     }
 
     // This function happens *before* the actual sending happens.
