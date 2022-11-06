@@ -339,6 +339,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
 
 [[package]]
+name = "ascii"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16"
+
+[[package]]
 name = "async-lock"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -585,6 +591,12 @@ dependencies = [
  "wasm-bindgen",
  "winapi",
 ]
+
+[[package]]
+name = "chunked_transfer"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fff857943da45f546682664a79488be82e69e43c1a7a2307679ab9afb3a66d2e"
 
 [[package]]
 name = "ciborium"
@@ -2316,6 +2328,7 @@ dependencies = [
  "once_cell",
  "parity-scale-codec",
  "prometheus",
+ "prometheus_exporter",
  "rand 0.8.5",
  "sc-transaction-pool-api",
  "serde",
@@ -2906,6 +2919,20 @@ dependencies = [
  "parking_lot 0.12.1",
  "protobuf",
  "thiserror",
+]
+
+[[package]]
+name = "prometheus_exporter"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caf17cbebe0bfdf4f279ef84eeefe0d50468b0b7116f078acf41d456e48fe81a"
+dependencies = [
+ "ascii",
+ "lazy_static",
+ "log",
+ "prometheus",
+ "thiserror",
+ "tiny_http",
 ]
 
 [[package]]
@@ -4369,6 +4396,19 @@ dependencies = [
  "unicode-normalization",
  "wasm-bindgen",
  "zeroize",
+]
+
+[[package]]
+name = "tiny_http"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5f8734c6d6943ad6df6b588d228a87b4af184998bcffa268ceddf05c2055a8c"
+dependencies = [
+ "ascii",
+ "chunked_transfer",
+ "log",
+ "time 0.3.16",
+ "url",
 ]
 
 [[package]]

@@ -38,6 +38,7 @@ futures = { version = "0.3.24", features = ["executor"] }
 hex = "0.4.3"
 jsonrpsee = { git = "https://github.com/manta-network/jsonrpsee.git", branch = "v0151", features = ["full"] }
 prometheus = "0.13.2"
+prometheus_exporter = { version = "0.8", features = ["logging"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "2.0.1"

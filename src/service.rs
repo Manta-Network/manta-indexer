@@ -23,6 +23,7 @@ use crate::relayer::{
 };
 use anyhow::{bail, Result};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
+use std::os::unix::net::SocketAddr;
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 
@@ -45,6 +46,9 @@ pub async fn start_service() -> Result<WsServerHandle> {
     module.merge(indexer_rpc.into_rpc())?;
 
     let port = config["indexer"]["configuration"]["port"]
+        .as_integer()
+        .ok_or(crate::IndexerError::WrongConfig)?;
+    let monitor_port = config["indexer"]["configuration"]["prometheus_port"]
         .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
     let frequency = config["indexer"]["configuration"]["frequency"]
@@ -88,5 +92,8 @@ pub async fn start_service() -> Result<WsServerHandle> {
 
     let _addr = server.local_addr()?;
     let handle = server.start(module)?;
+
+    let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
+    prometheus_exporter::start(prometheus_addr.parse()?)?;
     Ok(handle)
 }

@@ -31,7 +31,7 @@ use toml::Value;
 
 // read project config file
 pub fn read_config() -> Result<Value> {
-    let config = File::open(concat!(env!("CARGO_MANIFEST_DIR"), "/config.toml"))?;
+    let config = File::open(concat!(env!("CARGO_MANIFEST_DIR"), "/conf/config.toml"))?;
     let mut buff = BufReader::new(config);
     let mut contents = String::new();
     buff.read_to_string(&mut contents)?;

@@ -46,13 +46,13 @@ async fn main() -> Result<()> {
     // if ctr + c {
     //     handler.stop().await?;
     // }
-    loop {
-        sleep(Duration::from_secs(2)).await;
-        let mut buffer = Vec::new();
-        let encoder = TextEncoder::new();
-        let m = prometheus::gather();
-        encoder.encode(&m, &mut buffer).unwrap();
-        info!(target: "indexer", "prometheus info: {}", String::from_utf8(buffer).unwrap());
-    }
+    // loop {
+    //     sleep(Duration::from_secs(2)).await;
+    //     let mut buffer = Vec::new();
+    //     let encoder = TextEncoder::new();
+    //     let m = prometheus::gather();
+    //     encoder.encode(&m, &mut buffer).unwrap();
+    //     info!(target: "indexer", "prometheus info: {}", String::from_utf8(buffer).unwrap());
+    // }
     futures::future::pending().await
 }

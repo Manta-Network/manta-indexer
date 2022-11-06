@@ -6,6 +6,8 @@ frequency = 2
 full_node = "wss://ws.rococo.dolphin.engineering:443"
 # indexer service port
 port = 7788
+# indexer monitoring port
+prometheus_port = 7789
 
 [server.configuration]
 # all params are default values from substrate
