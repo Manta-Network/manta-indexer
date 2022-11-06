@@ -9,3 +9,11 @@
 /tests/integration-tests/node_modules
 
 .idea
+
+logs
+
+# ignore all local test sqlite file.
+**/*.db
+# nodejs toxic
+**/package-lock.json
+**/yarn-*.log

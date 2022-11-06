@@ -22,7 +22,30 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {l} {f}:{L} - {m}{n}"
 
+  log_indexer:
+    kind: rolling_file
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 5Gb
+      roller:
+        kind: delete
+    append: false
+    path: "logs/indexer.log"
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {l} {f}:{L} - {m}{n}"
+
 root:
   level: trace
   appenders:
     - log_app
+
+
+loggers:
+  indexer:
+    level: trace
+    appenders:
+      - log_indexer
+    # the appenders of the logger’s parent will be associated with the logger unless the logger has its additive set to false
+    additive: false

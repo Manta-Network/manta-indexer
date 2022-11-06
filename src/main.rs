@@ -17,12 +17,17 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use frame_support::log::info;
+use prometheus::{Encoder, TextEncoder};
+use std::time::Duration;
+use tokio::time::sleep;
 
 mod constants;
 mod db;
 mod errors;
 mod indexer;
 mod logger;
+mod monitoring;
 mod relayer;
 mod service;
 mod types;
@@ -41,5 +46,13 @@ async fn main() -> Result<()> {
     // if ctr + c {
     //     handler.stop().await?;
     // }
+    loop {
+        sleep(Duration::from_secs(2)).await;
+        let mut buffer = Vec::new();
+        let encoder = TextEncoder::new();
+        let m = prometheus::gather();
+        encoder.encode(&m, &mut buffer).unwrap();
+        info!(target: "indexer", "prometheus info: {}", String::from_utf8(buffer).unwrap());
+    }
     futures::future::pending().await
 }

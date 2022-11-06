@@ -16,7 +16,7 @@ export async function createPromiseApi(nodeAddress: string) {
 
   const api = new ApiPromise({ provider: wsProvider });
   await api.isReady;
-  console.log(`${nodeAddress} has bee started`);
+  console.log(`${nodeAddress} has been started`);
   return api;
 }
 

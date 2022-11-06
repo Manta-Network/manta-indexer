@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-pub mod middleware;
 /// Relaying part relays the requests from Dapp to backend full node.
 /// It plays a role as the startup part of service, which means we should raise up a
 /// service use `start_server()` below and inject any udf logic into the server impl.

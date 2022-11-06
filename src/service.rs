@@ -16,6 +16,7 @@
 
 use crate::constants::MEGABYTE;
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
+use crate::monitoring::IndexerMiddleware;
 use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
     WsServerConfig,
@@ -50,7 +51,11 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
     if frequency >= FULL_NODE_BLOCK_GEN_INTERVAL_SEC as i64 {
-        bail!("frequency config({}) is larger than limit({})", frequency, FULL_NODE_BLOCK_GEN_INTERVAL_SEC);
+        bail!(
+            "frequency config({}) is larger than limit({})",
+            frequency,
+            FULL_NODE_BLOCK_GEN_INTERVAL_SEC
+        );
     }
 
     // create relay rpc handler
@@ -77,8 +82,7 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .max_response_body_size(srv_config.max_response_body_size * MEGABYTE)
         .ping_interval(srv_config.ping_interval)
         .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
-        // .set_middleware(IndexerMiddleware::default())
-        .set_middleware(crate::logger::IndexerLogger)
+        .set_middleware(IndexerMiddleware::default())
         .build(srv_addr)
         .await?;
 
