@@ -26,16 +26,17 @@ use manta_pay::config::MerkleTreeConfiguration;
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
+use std::time::Duration;
 use std::time::Instant;
 use tokio_stream::StreamExt;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 #[instrument]
 pub async fn synchronize_shards(
     ws: &WsClient,
     next_checkpoint: &Checkpoint,
-    max_sender_count: u32,
-    max_receiver_count: u32,
+    max_sender_count: u64,
+    max_receiver_count: u64,
 ) -> Result<PullResponse> {
     let params = rpc_params![next_checkpoint, max_sender_count, max_receiver_count];
 
@@ -77,19 +78,17 @@ pub fn reconstruct_shards_from_pull_response(
 */
 #[instrument]
 pub async fn sync_shards_from_full_node(
-    ws: &str,
+    ws_client: &WsClient,
     pool: &SqlitePool,
-    max_count: (u32, u32),
+    max_count: (u64, u64),
 ) -> Result<()> {
-    let client = crate::utils::create_ws_client(ws).await?;
-
     let mut current_checkpoint = crate::db::get_latest_check_point(pool).await?;
     let (max_sender_count, max_receiver_count) = max_count;
 
     let mut next_checkpoint = current_checkpoint;
     loop {
         let resp = synchronize_shards(
-            &client,
+            &ws_client,
             &next_checkpoint,
             max_sender_count,
             max_receiver_count,
@@ -144,6 +143,27 @@ pub async fn sync_shards_from_full_node(
     }
 
     Ok(())
+}
+
+pub async fn start_sync_shards_job(
+    ws_client: &WsClient,
+    pool: &SqlitePool,
+    max_count: (u64, u64),
+    frequency: u64,
+) -> Result<()> {
+    let mut synced_times = 0u32;
+    loop {
+        crate::indexer::sync::sync_shards_from_full_node(
+            &ws_client,
+            &pool,
+            (max_count.0, max_count.1),
+        )
+        .await?;
+        synced_times += 1;
+        info!("synced shards {synced_times} times");
+        // every frequency, start to sync shards from full node.
+        tokio::time::sleep(Duration::from_secs(frequency)).await;
+    }
 }
 
 #[instrument]

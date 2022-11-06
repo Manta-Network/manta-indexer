@@ -32,6 +32,8 @@ pub enum IndexerError {
     JsonRpseeError(#[from] jsonrpsee::core::error::Error),
     #[error("Wrong config file(config.toml).")]
     WrongConfig,
+    #[error("This rpc method doesn't exist.")]
+    RpcMethodNotExists,
     #[error("Unknown error.")]
     Unknown,
 }

@@ -90,9 +90,7 @@ pub async fn is_the_rpc_methods_existed(ws: &WsClient, rpc_method: &str) -> Resu
         methods: Vec<String>,
     }
 
-    println!("is connected: {}", ws.is_connected());
     let methods = ws.request::<RpcMethods>("rpc_methods", None).await?;
-
     Ok(methods.methods.iter().any(|m| m == rpc_method))
 }
 
