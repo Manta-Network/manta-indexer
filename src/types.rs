@@ -16,6 +16,7 @@
 
 use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use std::mem;
 
 pub const CIPHER_TEXT_LENGTH: usize = 68;
 pub const EPHEMERAL_PUBLIC_KEY_LENGTH: usize = 32;
@@ -39,6 +40,47 @@ pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>; // The size of each sinle e
 
 /// Sender Chunk Data Type
 pub type SenderChunk = Vec<VoidNumber>;
+
+pub const fn size_of_utxo() -> usize {
+    UTXO_LENGTH
+}
+
+pub const fn size_of_encrypted_note() -> usize {
+    EPHEMERAL_PUBLIC_KEY_LENGTH + CIPHER_TEXT_LENGTH
+}
+
+pub const fn size_of_void_number() -> usize {
+    VOID_NUMBER_LENGTH
+}
+
+pub fn size_of_receiver_chunk(chunk: &ReceiverChunk) -> usize {
+    chunk.len() * (size_of_encrypted_note() + size_of_encrypted_note())
+}
+
+pub fn size_of_sender_chunk(chunk: &SenderChunk) -> usize {
+    chunk.len() * size_of_void_number()
+}
+
+pub fn size_of_pull_response(resp: &PullResponse) -> usize {
+    let mut _size = 0;
+    _size += mem::size_of_val(&resp.should_continue);
+    _size += mem::size_of_val(&resp.senders_receivers_total);
+    _size += size_of_sender_chunk(&resp.senders);
+    _size += size_of_receiver_chunk(&resp.receivers);
+
+    _size
+}
+
+pub fn upper_bound_for_response(payload_size: usize) -> (usize, usize) {
+    let senders_share = size_of_void_number() as f32
+        / (size_of_encrypted_note() + size_of_encrypted_note() + size_of_void_number()) as f32;
+    let receivers_share = 1.0f32 - senders_share;
+
+    let sender_len = senders_share * payload_size as f32 / size_of_void_number() as f32;
+    let receivers_len = receivers_share * payload_size as f32
+        / (size_of_encrypted_note() + size_of_encrypted_note()) as f32;
+    (sender_len as usize, receivers_len as usize)
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RpcMethods {

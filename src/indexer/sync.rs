@@ -34,9 +34,13 @@ use tracing::instrument;
 pub async fn synchronize_shards(
     ws: &WsClient,
     next_checkpoint: &Checkpoint,
-    max_sender_count: u32,
-    max_receiver_count: u32,
+    mut max_sender_count: u64,
+    mut max_receiver_count: u64,
 ) -> Result<PullResponse> {
+    if max_receiver_count > super::MAX_RECEIVERS || max_sender_count > super::MAX_SENDERS {
+        max_receiver_count = super::MAX_RECEIVERS;
+        max_sender_count = super::MAX_SENDERS;
+    }
     let params = rpc_params![next_checkpoint, max_sender_count, max_receiver_count];
 
     let pull_response = ws
@@ -79,7 +83,7 @@ pub fn reconstruct_shards_from_pull_response(
 pub async fn sync_shards_from_full_node(
     ws: &str,
     pool: &SqlitePool,
-    max_count: (u32, u32),
+    max_count: (u64, u64),
 ) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await?;
 
@@ -151,7 +155,6 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await.unwrap();
 
     let mut current_checkpoint = Checkpoint::default();
-    // current_checkpoint.sender_index = 0usize;
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
 
     let mut next_checkpoint = current_checkpoint;
@@ -230,7 +233,6 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
 
     let mut current_checkpoint = Checkpoint::default();
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
-    // let (max_sender_count, max_receiver_count) = (1024, 1024);
 
     let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
@@ -326,20 +328,22 @@ mod tests {
         let pool = pool.unwrap();
 
         let mut sum = 0f32;
-        for _i in 0..5 {
+        let times = 5;
+        for _i in 0..times {
             sum += pull_ledger_diff_from_sqlite(&pool).await.unwrap();
         }
-        println!("time cost: {} second", sum / 5f32);
+        println!("time cost: {} second", sum / times as f32);
     }
 
     #[tokio::test]
     #[ignore = "todo, use Georgi's stress test to generate related utxos."]
     async fn bench_pull_shards_from_local_node() {
         let mut sum = 0f32;
-        for _i in 0..3 {
+        let times = 1;
+        for _i in 0..times {
             sum += pull_ledger_diff_from_local_node().await.unwrap();
         }
-        println!("time cost: {} second", sum / 3f32);
+        println!("time cost: {} second", sum / times as f32);
     }
 
     #[tokio::test]
