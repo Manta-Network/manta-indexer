@@ -20,8 +20,10 @@ use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
     WsServerConfig,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
+
+const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 
 pub async fn start_service() -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
@@ -44,16 +46,18 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let port = config["indexer"]["configuration"]["port"]
         .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
-    let _frequency = config["indexer"]["configuration"]["frequency"]
+    let frequency = config["indexer"]["configuration"]["frequency"]
         .as_integer()
         .ok_or(crate::IndexerError::WrongConfig)?;
+    if frequency >= FULL_NODE_BLOCK_GEN_INTERVAL_SEC as i64 {
+        bail!("frequency config({}) is larger than limit({})", frequency, FULL_NODE_BLOCK_GEN_INTERVAL_SEC);
+    }
 
     // create relay rpc handler
     let relayer_rpc = MantaRpcRelayServer::new(full_node).await?;
     module.merge(relayer_rpc.into_rpc())?;
 
-    let content = crate::utils::read_config()?;
-    let config = content["server"]["configuration"].to_string();
+    let config = config["server"]["configuration"].to_string();
     let srv_config: WsServerConfig = toml::from_str(&config)?;
 
     let mut available_methods = module.method_names().collect::<Vec<_>>();
