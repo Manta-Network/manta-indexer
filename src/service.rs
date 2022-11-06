@@ -23,7 +23,7 @@ use crate::relayer::{
 };
 use anyhow::{bail, Result};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
-use std::os::unix::net::SocketAddr;
+
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 
