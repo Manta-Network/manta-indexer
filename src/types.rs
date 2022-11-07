@@ -36,7 +36,7 @@ pub type Group = [u8; EPHEMERAL_PUBLIC_KEY_LENGTH];
 pub type Ciphertext = [u8; CIPHER_TEXT_LENGTH];
 
 /// Receiver Chunk Data Type
-pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>; // The size of each sinle element should be 132 bytes
+pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>; // The size of each single element should be 132 bytes
 
 /// Sender Chunk Data Type
 pub type SenderChunk = Vec<VoidNumber>;

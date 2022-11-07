@@ -57,3 +57,11 @@ tempfile = "3.3.0"
 [[bench]]
 name = "db_bench"
 harness = false
+
+[[bin]]
+name = "indexer"
+path = "src/main.rs"
+
+[[bin]]
+name = "load_ledger_locally"
+path = "bin/load_ledger_locally.rs"

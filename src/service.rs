@@ -33,13 +33,13 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let config = crate::utils::read_config()?;
     let full_node = config["indexer"]["configuration"]["full_node"]
         .as_str()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
     let pool_size = config["db"]["configuration"]["pool_size"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)? as u32;
+        .ok_or(crate::errors::IndexerError::WrongConfig)? as u32;
     let db_path = config["db"]["configuration"]["db_path"]
         .as_str()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
 
     // create indexer rpc handler
     let indexer_rpc = MantaPayIndexerServer::new(db_path, pool_size, full_node).await?;
@@ -47,13 +47,13 @@ pub async fn start_service() -> Result<WsServerHandle> {
 
     let port = config["indexer"]["configuration"]["port"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
     let monitor_port = config["indexer"]["configuration"]["prometheus_port"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
     let frequency = config["indexer"]["configuration"]["frequency"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
     if frequency >= FULL_NODE_BLOCK_GEN_INTERVAL_SEC as i64 {
         bail!(
             "frequency config({}) is larger than limit({})",

@@ -14,19 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-/// The storage name: MantaPay
-pub const MANTA_PAY_KEY_PREFIX: [u8; 8] = *b"MantaPay";
-/// The storage name: Shards
-pub const MANTA_PAY_STORAGE_SHARDS_NAME: [u8; 6] = *b"Shards";
-/// The storage name: VoidNumberSetInsertionOrder
-pub const MANTA_PAY_STORAGE_VOID_NAME: [u8; 27] = *b"VoidNumberSetInsertionOrder";
-
-pub const PULL_MAX_SENDER_UPDATE_SIZE: u64 = 32768;
-pub const PULL_MAX_RECEIVER_UPDATE_SIZE: u64 = 32768;
-
-pub const VOID_NUMBER_TABLE_NAME: &str = "void_number";
-pub const SHARD_TABLE_NAME: &str = "shard";
-
-pub const MEGABYTE: u32 = 1024 * 1024;
-
-pub const PULL_LEDGER_DIFF_METHODS : &str = "mantaPay_pull_ledger_diff";
+pub mod constants;
+pub mod db;
+pub mod errors;
+pub mod indexer;
+pub mod logger;
+pub mod monitoring;
+pub mod relayer;
+pub mod service;
+pub mod types;
+pub mod utils;
