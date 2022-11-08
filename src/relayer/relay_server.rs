@@ -68,9 +68,6 @@ pub struct MantaRpcRelayServer {
     pub sub_clients: Arc<MtoMSubClientPool>,
 }
 
-/// The whole relaying
-pub(crate) struct MantaRpcRelayClient {}
-
 /// MantaRelayApi declare the relaying part of Indexer.
 /// Each rpc method below is actually also declared in full node and used by our DApp.
 ///

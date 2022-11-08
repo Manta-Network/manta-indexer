@@ -182,7 +182,8 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
                     *shard_index,
                     (next_index_beginning_offset + offset) as u64,
                     encoded_utxo,
-                ).await?;
+                )
+                .await?;
             }
         }
 
@@ -203,6 +204,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         let time = now.elapsed().as_millis();
         now = Instant::now();
         info!(
+            target: "indexer",
             "sync new loop({}): fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
             counter,
             resp.receivers.len(),
