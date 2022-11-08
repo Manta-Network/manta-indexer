@@ -28,6 +28,7 @@ log4rs = "1.2"
 # manta deps
 manta-crypto = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4" }
 manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4", features = ["groth16", "scale", "serde"] }
+manta-util = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4" }
 
 # general crates
 chrono = "0.4.22"

@@ -205,6 +205,14 @@ pub async fn get_one_void_number(pool: &SqlitePool, vn_index: u64) -> Result<Voi
     Ok(one)
 }
 
+pub async fn get_length_of_void_number(pool: &SqlitePool) -> Result<usize> {
+    let length = sqlx::query("SELECT vn FROM void_number;")
+        .fetch_all(pool)
+        .await?
+        .len();
+    Ok(length)
+}
+
 pub async fn get_batched_void_number(
     pool: &SqlitePool,
     from_vn_index: u64,

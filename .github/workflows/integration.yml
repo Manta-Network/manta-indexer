@@ -34,6 +34,7 @@ jobs:
       - name: Start Relaychain Network with Dolphin
         run: |
           cd ${{ github.workspace }}/polkadot-launch
+          curl -L -o ${{ github.workspace }}/.github/resources/mantapay-v0.json https://manta-ops.s3.amazonaws.com/v3.4.3-bfa08d6/fork.json
           yarn
           yarn build
           pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin.json
@@ -47,8 +48,19 @@ jobs:
           cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn block-production
-      - name: Run Integration Test
+      - name: Run Relayer Integration Test
         run: |
           cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn test-relayer
+      - name: Check First Pulling
+          run: |
+            cd ${{ github.workspace }}
+      - name: Submit Some Mint Extrinsics
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn mint
+      - name: Check Incremental Synchronization
+          run: |
+            cd ${{ github.workspace }}

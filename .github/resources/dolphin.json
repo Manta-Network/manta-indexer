@@ -50,7 +50,7 @@
 	"parachains": [
 		{
 			"bin": "manta",
-			"chain": "dolphin-dev",
+			"chain": "../mantapay-v0.json",
 			"id": "2084",
 			"nodes": [
 				{

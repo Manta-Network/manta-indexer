@@ -47,12 +47,13 @@ pub async fn synchronize_shards(
     Ok(pull_response)
 }
 
-pub fn reconstruct_shards_from_pull_response(
+pub async fn reconstruct_shards_from_pull_response(
     pull_response: &PullResponse,
 ) -> Result<HashMap<u8, Vec<(Utxo, EncryptedNote)>>> {
     let mut shards =
         HashMap::<u8, Vec<(Utxo, EncryptedNote)>>::with_capacity(pull_response.senders.len());
-    for receiver in pull_response.receivers.iter() {
+    let mut stream_receivers = tokio_stream::iter(pull_response.receivers.iter());
+    while let Some(receiver) = stream_receivers.next().await {
         let shard_index = MerkleTreeConfiguration::tree_index(
             &receiver
                 .0
@@ -88,13 +89,13 @@ pub async fn sync_shards_from_full_node(
     let mut next_checkpoint = current_checkpoint;
     loop {
         let resp = synchronize_shards(
-            &ws_client,
+            ws_client,
             &next_checkpoint,
             max_sender_count,
             max_receiver_count,
         )
         .await?;
-        let shards = reconstruct_shards_from_pull_response(&resp)?;
+        let shards = reconstruct_shards_from_pull_response(&resp).await?;
 
         // update shards
         let mut stream_shards = tokio_stream::iter(shards.iter());
@@ -132,8 +133,9 @@ pub async fn sync_shards_from_full_node(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
-            resp.receivers.len(),
-        );
+            resp.senders.len(),
+        )
+        .await;
 
         // should_continue == true means the synchronization is done.
         if !resp.should_continue {
@@ -154,8 +156,8 @@ pub async fn start_sync_shards_job(
     let mut synced_times = 0u32;
     loop {
         crate::indexer::sync::sync_shards_from_full_node(
-            &ws_client,
-            &pool,
+            ws_client,
+            pool,
             (max_count.0, max_count.1),
         )
         .await?;
@@ -171,7 +173,6 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await.unwrap();
 
     let mut current_checkpoint = Checkpoint::default();
-    // current_checkpoint.sender_index = 0usize;
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
 
     let mut next_checkpoint = current_checkpoint;
@@ -185,7 +186,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
             max_receiver_count,
         )
         .await?;
-        let shards = reconstruct_shards_from_pull_response(&resp)?;
+        let shards = reconstruct_shards_from_pull_response(&resp).await?;
 
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
@@ -222,12 +223,13 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
-            resp.receivers.len(),
-        );
+            resp.senders.len(),
+        )
+        .await;
         println!(
             "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
             next_checkpoint,
-            resp.receivers.len(),
+            resp.senders.len(),
             resp.senders_receivers_total
         );
         if !resp.should_continue {
@@ -244,13 +246,11 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
 }
 
 #[instrument]
-pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
-    let url = "ws://127.0.0.1:7788";
+pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
     let client = crate::utils::create_ws_client(url).await?;
 
     let mut current_checkpoint = Checkpoint::default();
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
-    // let (max_sender_count, max_receiver_count) = (1024, 1024);
 
     let mut next_checkpoint = current_checkpoint;
     let mut times = 0u32;
@@ -265,18 +265,19 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
             max_receiver_count,
         )
         .await?;
-        let shards = reconstruct_shards_from_pull_response(&resp)?;
+        let shards = reconstruct_shards_from_pull_response(&resp).await?;
 
         super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
-            resp.receivers.len(),
-        );
+            resp.senders.len(),
+        )
+        .await;
         println!(
             "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
             next_checkpoint,
-            resp.receivers.len(),
+            resp.senders.len(),
             resp.senders_receivers_total
         );
         if !resp.should_continue {
@@ -294,7 +295,6 @@ pub async fn pull_ledger_diff_from_local_node() -> Result<f32> {
 #[instrument]
 pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
     let mut current_checkpoint = Checkpoint::default();
-    // current_checkpoint.sender_index = 0usize;
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
 
     let mut next_checkpoint = current_checkpoint;
@@ -311,13 +311,14 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         )
         .await?;
 
-        let shards = reconstruct_shards_from_pull_response(&resp)?;
+        let shards = reconstruct_shards_from_pull_response(&resp).await?;
         super::pull::calculate_next_checkpoint(
             &shards,
             &current_checkpoint,
             &mut next_checkpoint,
-            resp.receivers.len(),
-        );
+            resp.senders.len(),
+        )
+        .await;
         if !resp.should_continue {
             break;
         }
@@ -337,8 +338,25 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "todo, use Georgi's stress test to generate related utxos."]
+    async fn quickly_pull_shards_from_full_node() {
+        let url = "ws://127.0.0.1:9800";
+        let db_path = "dolphin.db";
+        let pool_size = 16u32;
+        let pool = db::initialize_db_pool(db_path, pool_size).await;
+        assert!(pool.is_ok());
+
+        let pool = pool.unwrap();
+
+        let now = Instant::now();
+        let r = pull_all_shards_to_db(&pool, url).await;
+        dbg!(now.elapsed().as_secs_f32());
+        assert!(r.is_ok());
+    }
+
+    #[tokio::test]
+    // #[ignore = "todo, use Georgi's stress test to generate related utxos."]
     async fn bench_pull_ledger_diff_from_sqlite() {
-        let db_path = "latest-dolphin-shards.db";
+        let db_path = "xdolphin.db";
         let pool_size = 16u32;
         let pool = db::initialize_db_pool(db_path, pool_size).await;
         assert!(pool.is_ok());
@@ -346,7 +364,7 @@ mod tests {
         let pool = pool.unwrap();
 
         let mut sum = 0f32;
-        for _i in 0..5 {
+        for _i in 0..3 {
             sum += pull_ledger_diff_from_sqlite(&pool).await.unwrap();
         }
         println!("time cost: {} second", sum / 5f32);
@@ -355,11 +373,20 @@ mod tests {
     #[tokio::test]
     #[ignore = "todo, use Georgi's stress test to generate related utxos."]
     async fn bench_pull_shards_from_local_node() {
-        let mut sum = 0f32;
-        for _i in 0..3 {
-            sum += pull_ledger_diff_from_local_node().await.unwrap();
+        let mut i_sum = 0f32;
+        let mut f_sum = 0f32;
+        let indexer = "ws://127.0.0.1:7788";
+        let full_node = "ws://127.0.0.1:9800";
+        let times = 3;
+        for _i in 0..times {
+            i_sum += pull_ledger_diff_from_local_node(indexer).await.unwrap();
         }
-        println!("time cost: {} second", sum / 3f32);
+        println!("indexer time cost: {} second", i_sum / times as f32);
+
+        for _i in 0..times {
+            f_sum += pull_ledger_diff_from_local_node(full_node).await.unwrap();
+        }
+        println!("full node time cost: {} second", f_sum / times as f32);
     }
 
     #[tokio::test]
@@ -390,7 +417,7 @@ mod tests {
             synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
         let resp = resp.unwrap();
         assert!(resp.should_continue);
-        let shards = reconstruct_shards_from_pull_response(&resp).unwrap();
+        let shards = reconstruct_shards_from_pull_response(&resp).await.unwrap();
 
         for (k, shard) in shards.iter() {
             for sh in shard.iter() {

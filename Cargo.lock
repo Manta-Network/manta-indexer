@@ -2313,6 +2313,7 @@ dependencies = [
  "log4rs",
  "manta-crypto",
  "manta-pay",
+ "manta-util",
  "parity-scale-codec",
  "prometheus",
  "rand 0.8.5",

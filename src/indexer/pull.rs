@@ -21,10 +21,11 @@ use codec::Decode;
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
+use tokio_stream::StreamExt;
 use tracing::{debug, instrument};
 
 /// Calculate the next checkpoint.
-pub fn calculate_next_checkpoint(
+pub async fn calculate_next_checkpoint(
     previous_shards: &HashMap<u8, Vec<(Utxo, EncryptedNote)>>,
     previous_checkpoint: &Checkpoint,
     next_checkpoint: &mut Checkpoint,
@@ -32,7 +33,8 @@ pub fn calculate_next_checkpoint(
 ) {
     // point to next void number
     next_checkpoint.sender_index += sender_index;
-    for (i, utxos) in previous_shards.iter() {
+    let mut stream_shards = tokio_stream::iter(previous_shards.iter());
+    while let Some((i, utxos)) = stream_shards.next().await {
         let index = *i as usize;
         // offset for next shard
         next_checkpoint.receiver_index[index] =
@@ -95,7 +97,8 @@ pub async fn pull_receivers_for_shard(
             .await?;
 
     let mut idx = receiver_index;
-    for shard in shards {
+    let mut stream_shards = tokio_stream::iter(shards.iter());
+    while let Some(shard) = stream_shards.next().await {
         if *receivers_pulled == max_update {
             return Ok(crate::db::has_shard(pool, shard_index, idx as u64).await);
         }
@@ -115,20 +118,22 @@ pub async fn pull_senders(
     sender_index: usize,
     max_update_request: u64,
 ) -> Result<(bool, SenderChunk)> {
-    let mut senders = Vec::new();
+    let senders;
     let max_sender_index = if max_update_request > PULL_MAX_SENDER_UPDATE_SIZE {
         (sender_index as u64) + PULL_MAX_SENDER_UPDATE_SIZE
     } else {
         (sender_index as u64) + max_update_request
     };
-    // let batched_vns = crate::db::get_batched_void_number(pool, sender_index, max_sender_index - 1).await?;
-    // todo, batch reads instead of read vn one by one.
 
-    for idx in (sender_index as u64)..max_sender_index {
-        match crate::db::get_one_void_number(pool, idx).await {
-            Ok(next) => senders.push(next),
-            _ => return Ok((false, senders)),
-        }
+    if crate::db::has_void_number(pool, max_sender_index - 1).await {
+        senders =
+            crate::db::get_batched_void_number(pool, sender_index as u64, max_sender_index - 1)
+                .await?;
+    } else {
+        let length_of_vns = crate::db::get_len_of_void_number(pool).await? as u64;
+        senders = crate::db::get_batched_void_number(pool, sender_index as u64, length_of_vns - 1)
+            .await?;
+        return Ok((false, senders));
     }
     Ok((
         crate::db::has_void_number(pool, max_sender_index as u64).await,
