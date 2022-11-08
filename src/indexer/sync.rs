@@ -19,7 +19,7 @@ use crate::constants::PULL_LEDGER_DIFF_METHODS;
 use crate::types::{EncryptedNote, PullResponse, Utxo};
 use anyhow::Result;
 use codec::Encode;
-use frame_support::log::info;
+use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
@@ -152,7 +152,7 @@ pub async fn sync_shards_from_full_node(
 
 #[instrument]
 pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
-    let client = crate::utils::create_ws_client(ws).await.unwrap();
+    let client = crate::utils::create_ws_client(ws).await?;
 
     let mut current_checkpoint = Checkpoint::default();
     let (max_sender_count, max_receiver_count) = (1024 * 8, 1024 * 8);
@@ -168,6 +168,16 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
             max_receiver_count,
         )
         .await?;
+        if resp.senders.len() != resp.receivers.len() {
+            error!(
+                target: "indexer",
+                "pull ledger diff sender len({}) != receiver len({}), ckpt = {:?}",
+                resp.senders.len(),
+                resp.receivers.len(),
+                current_checkpoint
+            )
+        }
+
         let shards = reconstruct_shards_from_pull_response(&resp)?;
 
         // update receiver shards into sqlite.
@@ -200,7 +210,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
 
         // update next check point
         increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
-        total_items += resp.senders.len();
+        total_items += resp.receivers.len() + resp.senders.len();
         let time = now.elapsed().as_millis();
         now = Instant::now();
         info!(

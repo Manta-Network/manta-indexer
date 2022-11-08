@@ -24,12 +24,12 @@ async fn main() -> Result<()> {
                 ),
             ),
         )
-        // .logger(
-        //     Logger::builder()
-        //         .appenders(["stdout"])
-        //         .build("indexer", LevelFilter::Debug),
-        // )
-        .build(Root::builder().appender("stdout").build(LevelFilter::Warn))?;
+        .logger(
+            Logger::builder()
+                .appenders(["stdout"])
+                .build("indexer", LevelFilter::Debug),
+        )
+        .build(Root::builder().build(LevelFilter::Warn))?;
     log4rs::init_config(log4rs_config)?;
 
     // full node url to fetch ledgers.
@@ -38,7 +38,15 @@ async fn main() -> Result<()> {
     let sync_db = "local_sync.db";
     let pool_size = 16u32;
     let pool = manta_indexer::db::initialize_db_pool(sync_db, pool_size).await?;
-    let _r = manta_indexer::indexer::sync::pull_all_shards_to_db(&pool, full_node).await?;
+
+    // this loop args means we repeat the pull, the reason we need it
+    // is that in some testnet, the data size may be too small to do some stress test.
+    // so we clone the data by times to simulate the future scenario.
+    // if you don't care about this case, just set loop_time = 1;
+    let loop_time = 100;
+    for i in 0..loop_time {
+        let _r = manta_indexer::indexer::sync::pull_all_shards_to_db(&pool, full_node).await?;
+    }
     pool.close().await;
     Ok(())
 }
