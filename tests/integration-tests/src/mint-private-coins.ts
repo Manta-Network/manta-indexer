@@ -1,7 +1,7 @@
 import { Keyring } from "@polkadot/keyring";
-import { createPromiseApi } from "./utils";
+import { createPromiseApi, delay } from "./utils";
 import { indexerAddress } from "./config.json";
-import { readFile, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 
 async function main() {
   const indexerApi = await createPromiseApi(indexerAddress);
@@ -14,10 +14,8 @@ async function main() {
   const coinSize = 349; // each coin size is 349.
   const coinsCount = 12;
   // send 6 mint private transactions for each batch.
-  const batchSize = 3;
-  const content = await readFile(
-    "precompile-coins/precomputed_mints_v0"
-  );
+  const batchSize = 4;
+  const content = await readFile("precompile-coins/precomputed_mints_v0");
   const buffer = content.subarray(
     offSet + 0 * batchSize * coinSize,
     offSet + 0 * batchSize * coinSize + coinSize * coinsCount
@@ -27,7 +25,7 @@ async function main() {
   for (let k = 0; k < coinsCount / batchSize; ++k) {
     let mintTxs = [];
     for (let i = 0; i < batchSize; ++i) {
-      const mint = await indexerApi.tx.mantaPay.toPrivate(
+      const mint = indexerApi.tx.mantaPay.toPrivate(
         buffer.subarray(start, end)
       );
       mintTxs.push(mint);
@@ -35,25 +33,28 @@ async function main() {
       end += coinSize;
     }
 
-    const batch = await indexerApi.tx.utility.forceBatch(mintTxs);
-    const unsub = await batch.signAndSend(alice, (result) => {
-      console.log(`Current status is ${result.status}`);
-      result.events.forEach(({ phase, event: { data, method, section } }) => {
-        console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+    const unsub = await indexerApi.tx.utility
+      .batch(mintTxs)
+      .signAndSend(alice, { nonce: -1 }, (result) => {
+        console.log(`Current status is ${result.status}`);
+        result.events.forEach(({ phase, event: { data, method, section } }) => {
+          console.log(`\t' ${phase}: ${section}.${method}:: ${data}`);
+        });
+        if (result.status.isInBlock) {
+          console.log(
+            `Transaction included at blockHash ${result.status.asInBlock}`
+          );
+        } else if (result.status.isFinalized) {
+          console.log(
+            `Transaction finalized at blockHash ${result.status.asFinalized}`
+          );
+          unsub();
+        }
       });
-      if (result.status.isInBlock) {
-        console.log(
-          `Transaction included at blockHash ${result.status.asInBlock}`
-        );
-      } else if (result.status.isFinalized) {
-        console.log(
-          `Transaction finalized at blockHash ${result.status.asFinalized}`
-        );
-        unsub();
-      }
-    });
+    await delay(12000); // wait 12s to ensure transactions are included.
   }
 
+  console.log(`${coinsCount} transactions have been sent.`);
   await indexerApi.disconnect();
 }
 
