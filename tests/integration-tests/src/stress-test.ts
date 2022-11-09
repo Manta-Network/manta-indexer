@@ -53,19 +53,16 @@ describe("indexer stress test", function () {
             stop = true
         }, test_duration_sec * 1000);
 
+        let count = 0;
         let task_queue = [];
         while (!stop) {
             for (let i = 0; i < max_concurrent; ++i) {
                 task_queue.push(once_pull_ledger_call(indexer_apis[i]));
             }
             await Promise.all(task_queue);
+            count += 1;
         }
-
-        for (let i = 0; i < indexer_apis.length; ++i) {
-            await once_pull_ledger_call(indexer_apis[i]);
-        }
-
-        assert.isTrue(true);
+        console.log("stress test finish %d loop", count)
     })
 
 

@@ -18,7 +18,10 @@ use frame_support::log::{debug, error, trace};
 use jsonrpsee::core::middleware::{Headers, MethodKind, WsMiddleware};
 use jsonrpsee::types::Params;
 use once_cell::sync::Lazy;
-use prometheus::{opts, register_int_counter_vec, IntCounterVec, Opts};
+use prometheus::{
+    histogram_opts, linear_buckets, opts, register_histogram_vec, register_int_counter_vec,
+    HistogramOpts, HistogramVec, IntCounterVec, Opts,
+};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -34,6 +37,14 @@ pub fn indexer_relay_opts(name: &str, help: &str) -> Opts {
         .subsystem("relay")
 }
 
+/// this function helps wrapper common namespace and subsystems and bucket into a histogram_opts
+/// with "manta_indexer" + "relay"
+pub fn indexer_relay_histogram_opts(name: &str, help: &str, bucket: Vec<f64>) -> HistogramOpts {
+    histogram_opts!(name, help, bucket)
+        .namespace(MANTA_INDEXER_MONITORING_NAMESPACE)
+        .subsystem("relay")
+}
+
 /// this function helps wrapper common namespace and subsystems into a opts
 /// with "manta_indexer" + "ledger"
 pub fn indexer_ledger_opts(name: &str, help: &str) -> Opts {
@@ -42,12 +53,33 @@ pub fn indexer_ledger_opts(name: &str, help: &str) -> Opts {
         .subsystem("ledger")
 }
 
+/// this function helps wrapper common namespace and subsystems into a opts
+/// with "manta_indexer" + "ledger"
+pub fn indexer_ledger_histogram_opts(name: &str, help: &str, bucket: Vec<f64>) -> HistogramOpts {
+    histogram_opts!(name, help, bucket)
+        .namespace(MANTA_INDEXER_MONITORING_NAMESPACE)
+        .subsystem("ledger")
+}
+
+/// Counter to count all request amount by method and status.
 static TOTAL_RELAYING_COUNTER: Lazy<IntCounterVec> = Lazy::new(|| {
     let opts = indexer_relay_opts(
         "total_relay_count",
         "counting the total received relay request",
     );
     register_int_counter_vec!(opts, &["method", "status"]).expect("total_relay_counter alloc fail")
+});
+
+/// stat the response time of all relaying request divided by methods.
+/// will calc the avg, p99, p995, max_value, etc.
+/// Dimension: ms.
+static RELAY_RESPONSE_TIME: Lazy<HistogramVec> = Lazy::new(|| {
+    let opts = indexer_relay_histogram_opts(
+        "response_time",
+        "stat the relaying response time",
+        linear_buckets(0f64, 20f64, 100).unwrap(),
+    );
+    register_histogram_vec!(opts, &["method"]).expect("response_time alloc fail")
 });
 
 #[derive(Default, Clone)]
@@ -97,16 +129,20 @@ impl WsMiddleware for IndexerMiddleware {
 
     // This function happens *after* the actual method calling.
     fn on_result(&self, name: &str, success: bool, started_at: Self::Instant) {
+        let elapsed_time = started_at.elapsed().as_millis();
         trace!(
             target: "indexer",
             "[on_result] a ws call is finished, name = {}, success = {}, time = {:?} ms",
             name,
             success,
-            started_at.elapsed().as_millis()
+            elapsed_time
         );
         TOTAL_RELAYING_COUNTER
             .with_label_values(&[name, &success.to_string()])
             .inc();
+        RELAY_RESPONSE_TIME
+            .with_label_values(&[name])
+            .observe(elapsed_time as f64);
     }
 
     // This function happens *before* the actual sending happens.
