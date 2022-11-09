@@ -5,7 +5,7 @@ import createPromiseApi from "./utils";
 import {assert} from "chai";
 
 describe("indexer stress test", function () {
-    const max_concurrent = 10;
+    const max_concurrent = 3;
     const receiver_shard_num = 256;
     const max_receiver_num = 1024 * 8;
     const max_sender_num = 1024 * 8;
@@ -27,25 +27,62 @@ describe("indexer stress test", function () {
     it("stress test", async function () {
         const total_receivers = 15000000;
         const total_senders = 8000000;
+        const test_duration_sec = 60;
 
-        const gen_random = function (min: number, max: number): number {
-            return Math.floor(Math.random() * (max - min) + min)
-        }
-        for (let i = 0; i < indexer_apis.length; ++i) {
-            let ri = new Array<number>(receiver_shard_num).fill(0);
-            ri.forEach((_, index) => {
-                ri[index] = gen_random(0, total_receivers / receiver_shard_num)
-            });
-            await (indexer_apis[i].rpc as any).mantaPay.pull_ledger_diff(
+        const once_pull_ledger_call = async function (api: ApiPromise) {
+            const gen_random = function (min: number, max: number): number {
+                return Math.floor(Math.random() * (max - min) + min)
+            }
+            let ri = new Array<number>(receiver_shard_num).fill(0)
+                .map(() => {
+                    return gen_random(0, total_receivers / receiver_shard_num)
+                });
+            let si = gen_random(0, total_senders);
+            const data = await (api.rpc as any).mantaPay.pull_ledger_diff(
                 {
                     receiver_index: ri,
-                    sender_index: gen_random(0, total_senders),
+                    sender_index: si,
                 },
                 BigInt(max_receiver_num), BigInt(max_sender_num)
             );
+            console.log("get a response: ", data.receivers.length, data.senders.length)
+        }
+
+        let stop = false;
+        setTimeout(function () {
+            stop = true
+        }, test_duration_sec * 1000);
+
+        let task_queue = [];
+        while (!stop) {
+            for (let i = 0; i < max_concurrent; ++i) {
+                task_queue.push(once_pull_ledger_call(indexer_apis[i]));
+            }
+            await Promise.all(task_queue);
+        }
+
+        for (let i = 0; i < indexer_apis.length; ++i) {
+            await once_pull_ledger_call(indexer_apis[i]);
         }
 
         assert.isTrue(true);
+    })
+
+
+    it.skip("stress test for connection", async function () {
+        // create a lot of client to connect and disconnect.
+        // why this case here is that we found in some case
+        // the indexer connection will hang after N client connection.
+        let max_client = 100;
+        let retry_loop = 3;
+        for (let i = 0; i < retry_loop; ++i) {
+            let client_queue = [];
+            for (let j = 0; j < max_client; ++j) {
+                client_queue.push(createPromiseApi(indexerAddress));
+            }
+            let clients = await Promise.all(client_queue);
+            clients.forEach((client) => client.disconnect());
+        }
     })
 
     after(async function () {
