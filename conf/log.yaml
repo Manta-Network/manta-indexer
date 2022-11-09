@@ -37,14 +37,14 @@ appenders:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {l} {f}:{L} - {m}{n}"
 
 root:
-  level: trace
+  level: debug
   appenders:
     - log_app
 
 
 loggers:
   indexer:
-    level: trace
+    level: debug
     appenders:
       - log_indexer
     # the appenders of the logger’s parent will be associated with the logger unless the logger has its additive set to false
