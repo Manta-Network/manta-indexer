@@ -35,9 +35,13 @@ use tracing::{info, instrument};
 pub async fn synchronize_shards(
     ws: &WsClient,
     next_checkpoint: &Checkpoint,
-    max_sender_count: u64,
-    max_receiver_count: u64,
+    mut max_sender_count: u64,
+    mut max_receiver_count: u64,
 ) -> Result<PullResponse> {
+    if max_receiver_count > super::MAX_RECEIVERS || max_sender_count > super::MAX_SENDERS {
+        max_receiver_count = super::MAX_RECEIVERS;
+        max_sender_count = super::MAX_SENDERS;
+    }
     let params = rpc_params![next_checkpoint, max_sender_count, max_receiver_count];
 
     let pull_response = ws
@@ -364,10 +368,11 @@ mod tests {
         let pool = pool.unwrap();
 
         let mut sum = 0f32;
-        for _i in 0..3 {
+        let times = 5;
+        for _i in 0..times {
             sum += pull_ledger_diff_from_sqlite(&pool).await.unwrap();
         }
-        println!("time cost: {} second", sum / 5f32);
+        println!("time cost: {} second", sum / times as f32);
     }
 
     #[tokio::test]

@@ -49,13 +49,22 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
     async fn pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
-        max_receivers: u64,
-        max_senders: u64,
+        mut max_receivers: u64,
+        mut max_senders: u64,
     ) -> RpcResult<PullResponse> {
+        // Currently, there's a limit on max size of reposne body, 10MB.
+        // So 10MB means the params for (max_receivers, max_senders) is (1024 * 16, 1024 * 16).
+        // If the params exceeds the value, pull_ledger_diff still returns 1024 * 16 utxos at most in one time.
+        // so no error will be returned.
+        if max_receivers > MAX_RECEIVERS || max_senders > MAX_SENDERS {
+            max_receivers = MAX_RECEIVERS;
+            max_senders = MAX_SENDERS;
+        }
+
         let response =
             pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
                 .await
-                .map_err(|_| JsonRpseeError::AlreadyStopped)?;
+                .map_err(|e| JsonRpseeError::Custom(e.to_string()))?;
 
         Ok(response)
     }
