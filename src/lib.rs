@@ -18,7 +18,6 @@ pub mod constants;
 pub mod db;
 pub mod errors;
 pub mod indexer;
-pub mod logger;
 pub mod monitoring;
 pub mod relayer;
 pub mod service;

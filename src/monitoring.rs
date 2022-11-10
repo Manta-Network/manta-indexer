@@ -20,7 +20,8 @@ use jsonrpsee::types::Params;
 use once_cell::sync::Lazy;
 use prometheus::{
     histogram_opts, linear_buckets, opts, register_histogram_vec, register_int_counter_vec,
-    HistogramOpts, HistogramVec, IntCounterVec, Opts,
+    register_int_gauge, register_int_gauge_vec, HistogramOpts, HistogramVec, IntCounterVec,
+    IntGauge, IntGaugeVec, Opts,
 };
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -82,6 +83,16 @@ static RELAY_RESPONSE_TIME: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec!(opts, &["method"]).expect("response_time alloc fail")
 });
 
+static CONN_ON_THE_WAY: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = indexer_relay_opts("conn_on_the_way", "stat current ws connection number");
+    register_int_gauge!(opts).expect("conn_on_the_way alloc fail")
+});
+
+static REQ_ON_THE_WAY: Lazy<IntGaugeVec> = Lazy::new(|| {
+    let opts = indexer_relay_opts("req_on_the_way", "stat current ws request on the way");
+    register_int_gauge_vec!(opts, &["method"]).expect("req_on_the_way alloc fail")
+});
+
 #[derive(Default, Clone)]
 pub(crate) struct IndexerMiddleware {
     conn_num: Arc<AtomicU64>,
@@ -99,6 +110,7 @@ impl WsMiddleware for IndexerMiddleware {
             headers,
             cn + 1
         );
+        CONN_ON_THE_WAY.inc();
     }
 
     fn on_request(&self) -> Self::Instant {
@@ -125,6 +137,7 @@ impl WsMiddleware for IndexerMiddleware {
                 )
             }
         }
+        REQ_ON_THE_WAY.with_label_values(&[method_name]).inc();
     }
 
     // This function happens *after* the actual method calling.
@@ -143,6 +156,7 @@ impl WsMiddleware for IndexerMiddleware {
         RELAY_RESPONSE_TIME
             .with_label_values(&[name])
             .observe(elapsed_time as f64);
+        REQ_ON_THE_WAY.with_label_values(&[name]).dec();
     }
 
     // This function happens *before* the actual sending happens.
@@ -164,5 +178,6 @@ impl WsMiddleware for IndexerMiddleware {
             remote_addr,
             cn - 1
         );
+        CONN_ON_THE_WAY.dec();
     }
 }
