@@ -29,4 +29,4 @@ pub const SHARD_TABLE_NAME: &str = "shard";
 
 pub const MEGABYTE: u32 = 1024 * 1024;
 
-pub const PULL_LEDGER_DIFF_METHODS : &str = "mantaPay_pull_ledger_diff";
+pub const PULL_LEDGER_DIFF_METHODS: &str = "mantaPay_pull_ledger_diff";

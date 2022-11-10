@@ -24,7 +24,6 @@ use crate::relayer::{
 use anyhow::{bail, Result};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 
-
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 
 pub async fn start_service() -> Result<WsServerHandle> {
