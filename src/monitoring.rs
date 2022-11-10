@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-pub const MANTA_INDEXER_MONITORING_NAMESPACE: &'static str = "manta_indexer";
+pub const MANTA_INDEXER_MONITORING_NAMESPACE: &str = "manta_indexer";
 
 /// this function helps wrapper common namespace and subsystems into a opts
 /// with "manta_indexer" + "relay"

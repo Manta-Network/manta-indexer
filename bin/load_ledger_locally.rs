@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
     let sync_db = "local_sync.db";
     let pool_size = 16u32;
     let pool = manta_indexer::db::initialize_db_pool(sync_db, pool_size).await?;
-    let _r = manta_indexer::indexer::sync::pull_all_shards_to_db(&pool, full_node).await?;
+    manta_indexer::indexer::sync::pull_all_shards_to_db(&pool, full_node).await?;
     pool.close().await;
     Ok(())
 }
