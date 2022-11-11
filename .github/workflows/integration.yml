@@ -35,10 +35,15 @@ jobs:
         run: |
           cd ${{ github.workspace }}/polkadot-launch
           curl -L -o ${{ github.workspace }}/.github/resources/mantapay-v0.json https://manta-ops.s3.amazonaws.com/v3.4.3-bfa08d6/fork.json
+          cat ${{ github.workspace }}/.github/resources/dolphin.json | \
+            jq '.relaychain.bin = ${{ github.workspace }}/.github/resources/polkadot
+              | .parachains[0].bin = ${{ github.workspace }}/.github/resources/manta
+              | .parachains[0].chain = ${{ github.workspace }}/.github/resources/mantapay-v0.json
+              ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
           yarn
           yarn build
-          yarn start ${{ github.workspace }}/.github/resources/dolphin.json
-          pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin.json
+          yarn start ${{ github.workspace }}/.github/resources/dolphin-ci.json
+          pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin-ci.json
       - name: Build and Start Indexer 
         run: |
           cd ${{ github.workspace }}
