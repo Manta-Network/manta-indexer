@@ -163,13 +163,13 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
     let mut stream = tokio_stream::iter(0..=255u8);
     // If there's no any shard in db, return default checkpoint.
     while let Some(shard_index) = stream.next().await {
-        let batched_shard: Vec<Shard> =
-            sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?;")
+        let count_of_utxo: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM shards WHERE shard_index = ?;")
                 .bind(shard_index)
-                .fetch_all(pool)
+                .fetch_one(pool)
                 .await?;
 
-        ckp.receiver_index[shard_index as usize] = batched_shard.len();
+        ckp.receiver_index[shard_index as usize] = count_of_utxo.0 as usize;
     }
     ckp.sender_index = ckp.receiver_index.iter().sum();
 

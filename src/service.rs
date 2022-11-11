@@ -96,7 +96,7 @@ pub async fn start_service() -> Result<WsServerHandle> {
 
     crate::indexer::sync::start_sync_shards_job(
         &ws_client,
-        &db_pool,
+        db_pool,
         (MAX_RECEIVERS, MAX_SENDERS),
         frequency,
     )

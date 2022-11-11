@@ -13,7 +13,7 @@ async function main() {
   const offSet = 2;
   const coinSize = 349; // each coin size is 349.
   const coinsCount = 12;
-  // send 6 mint private transactions for each batch.
+  // send 4 mint private transactions for each batch.
   const batchSize = 4;
   const content = await readFile("precompile-coins/precomputed_mints_v0");
   const buffer = content.subarray(
@@ -26,7 +26,7 @@ async function main() {
     let mintTxs = [];
     for (let i = 0; i < batchSize; ++i) {
       const mint = indexerApi.tx.mantaPay.toPrivate(
-        buffer.subarray(start, end)
+        buffer.subarray(start)
       );
       mintTxs.push(mint);
       start = end;

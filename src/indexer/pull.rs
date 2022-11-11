@@ -118,23 +118,22 @@ pub async fn pull_senders(
     sender_index: usize,
     max_update_request: u64,
 ) -> Result<(bool, SenderChunk)> {
-    let senders;
     let max_sender_index = if max_update_request > PULL_MAX_SENDER_UPDATE_SIZE {
         (sender_index as u64) + PULL_MAX_SENDER_UPDATE_SIZE
     } else {
         (sender_index as u64) + max_update_request
     };
 
-    if crate::db::has_void_number(pool, max_sender_index - 1).await {
-        senders =
-            crate::db::get_batched_void_number(pool, sender_index as u64, max_sender_index - 1)
-                .await?;
+    let senders = if crate::db::has_void_number(pool, max_sender_index - 1).await {
+        crate::db::get_batched_void_number(pool, sender_index as u64, max_sender_index - 1).await?
     } else {
         let length_of_vns = crate::db::get_len_of_void_number(pool).await? as u64;
-        senders = crate::db::get_batched_void_number(pool, sender_index as u64, length_of_vns - 1)
-            .await?;
+        let senders =
+            crate::db::get_batched_void_number(pool, sender_index as u64, length_of_vns - 1)
+                .await?;
         return Ok((false, senders));
-    }
+    };
+
     Ok((
         crate::db::has_void_number(pool, max_sender_index as u64).await,
         senders,

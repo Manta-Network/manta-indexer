@@ -37,6 +37,7 @@ jobs:
           curl -L -o ${{ github.workspace }}/.github/resources/mantapay-v0.json https://manta-ops.s3.amazonaws.com/v3.4.3-bfa08d6/fork.json
           yarn
           yarn build
+          yarn start ${{ github.workspace }}/.github/resources/dolphin.json
           pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin.json
       - name: Build and Start Indexer 
         run: |
