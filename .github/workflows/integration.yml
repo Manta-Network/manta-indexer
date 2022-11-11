@@ -36,9 +36,13 @@ jobs:
           cd ${{ github.workspace }}/polkadot-launch
           curl -L -o ${{ github.workspace }}/.github/resources/mantapay-v0.json https://manta-ops.s3.amazonaws.com/v3.4.3-bfa08d6/fork.json
           cat ${{ github.workspace }}/.github/resources/dolphin.json | \
-            jq '.relaychain.bin = ${{ github.workspace }}/.github/resources/polkadot
-              | .parachains[0].bin = ${{ github.workspace }}/.github/resources/manta
-              | .parachains[0].chain = ${{ github.workspace }}/.github/resources/mantapay-v0.json
+            jq \
+              --arg relaychain_bin ${{ github.workspace }}/.github/resources/polkadot \
+              --arg parachains_bin ${{ github.workspace }}/.github/resources/manta \
+              --arg parachains_chain ${{ github.workspace }}/.github/resources/mantapay-v0.json \
+              '.relaychain.bin = $relaychain_bin
+              | .parachains[0].bin = $parachains_bin
+              | .parachains[0].chain = $parachains_chain
               ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
           yarn
           yarn build
