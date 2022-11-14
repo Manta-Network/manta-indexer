@@ -69,7 +69,12 @@ pub fn create_full_doublemap_key(
 }
 
 pub async fn create_ws_client(url: &str) -> Result<WsClient> {
-    let client = WsClientBuilder::default().build(&url).await?;
+    let client = WsClientBuilder::default()
+        .connection_timeout(Duration::from_secs(3))
+        .request_timeout(Duration::from_secs(3))
+        .ping_interval(Duration::from_secs(15))
+        .build(&url)
+        .await?;
 
     Ok(client)
 }

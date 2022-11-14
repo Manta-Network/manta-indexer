@@ -2,8 +2,8 @@
 # it means pull shards per 2 seconds, and should not be bigger than 12s.
 frequency = 2
 # connection backend full node
-# full_node = "ws://127.0.0.1:9800"
-full_node = "wss://ws.rococo.dolphin.engineering:443"
+full_node = "ws://127.0.0.1:9800"
+# full_node = "wss://ws.rococo.dolphin.engineering:443"
 # indexer service port
 port = 7788
 # indexer monitoring port
