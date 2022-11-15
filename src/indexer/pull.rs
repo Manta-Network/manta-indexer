@@ -15,11 +15,18 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::constants::*;
+use crate::monitoring::{
+    indexer_ledger_histogram_opts, indexer_ledger_opts, indexer_relay_histogram_opts,
+};
 use crate::types::{EncryptedNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
 use frame_support::log::trace;
 use manta_pay::signer::Checkpoint;
+use once_cell::sync::Lazy;
+use prometheus::{
+    linear_buckets, register_histogram, register_histogram_vec, Histogram, HistogramVec,
+};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tracing::{debug, instrument};
@@ -143,6 +150,15 @@ pub async fn pull_senders(
     ))
 }
 
+static PULL_INNER: Lazy<Histogram> = Lazy::new(|| {
+    let opts = indexer_ledger_histogram_opts(
+        "pull_ledger_diff_duration",
+        "stat the relaying response time",
+        linear_buckets(0f64, 20f64, 100).unwrap(),
+    );
+    register_histogram!(opts).expect("response_time alloc fail")
+});
+
 /// pull_ledger_diff from local sqlite from given checkpoint position.
 #[instrument]
 pub async fn pull_ledger_diff(
@@ -153,10 +169,12 @@ pub async fn pull_ledger_diff(
 ) -> Result<PullResponse> {
     trace!(target: "indexer", "receive a pull_ledger_diff req with max_sender: {}, max_receiver: {}", max_receivers, max_senders);
 
+    let timer = PULL_INNER.start_timer();
     let (more_receivers, receivers) =
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
     let (more_senders, senders) = pull_senders(pool, checkpoint.sender_index, max_senders).await?;
     let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await? as u128;
+    drop(timer);
 
     Ok(PullResponse {
         should_continue: more_receivers || more_senders,
