@@ -69,11 +69,13 @@ describe("indexer stress test", function () {
             count += 1;
         }
         // calculate summary
-        query_latency.sort();
-        let p99_latency = query_latency[Math.round(query_latency.length / 100 * 99)];
-        let qps = query_latency.length / test_duration_sec;
-        let avg_latency = query_latency.reduce((acc, val) => acc + val, 0) / query_latency.length;
-        console.log("stress test finish %d loop, qps = %.2f, avg = %.2f, p99 = %.2f", count, qps, avg_latency, p99_latency)
+        query_latency.sort(function (a, b) {
+            return a - b;
+        });
+        let p99_latency = query_latency[Math.round(query_latency.length / 100 * 99)].toFixed(2);
+        let qps = (query_latency.length / test_duration_sec).toFixed(2);
+        let avg_latency = (query_latency.reduce((acc, val) => acc + val, 0) / query_latency.length).toFixed(2);
+        console.log("stress test finish %d loop, qps = %d, avg = %d ms, p99 = %d ms", count, qps, avg_latency, p99_latency)
     })
 
 
