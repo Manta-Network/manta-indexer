@@ -3,6 +3,7 @@ import {ApiPromise} from "@polkadot/api";
 import {dolphinFullNode, indexerAddress} from "./config.json";
 import createPromiseApi from "./utils";
 import {assert} from "chai";
+import {performance} from "perf_hooks";
 
 describe("indexer stress test", function () {
     const max_concurrent = 3;
@@ -29,6 +30,8 @@ describe("indexer stress test", function () {
         const total_senders = 8000000;
         const test_duration_sec = 60;
 
+        let query_latency: number[] = [];
+
         const once_pull_ledger_call = async function (api: ApiPromise) {
             const gen_random = function (min: number, max: number): number {
                 return Math.floor(Math.random() * (max - min) + min)
@@ -38,6 +41,7 @@ describe("indexer stress test", function () {
                     return gen_random(0, total_receivers / receiver_shard_num)
                 });
             let si = gen_random(0, total_senders);
+            let before = performance.now();
             const data = await (api.rpc as any).mantaPay.pull_ledger_diff(
                 {
                     receiver_index: ri,
@@ -45,7 +49,9 @@ describe("indexer stress test", function () {
                 },
                 BigInt(max_receiver_num), BigInt(max_sender_num)
             );
-            console.log("get a response: ", data.receivers.length, data.senders.length)
+            let cost = performance.now() - before;  // ms
+            query_latency.push(cost);
+            console.log("get a response at cost(%i ms): %i, %i", cost, data.receivers.length, data.senders.length)
         }
 
         let stop = false;
@@ -62,7 +68,12 @@ describe("indexer stress test", function () {
             await Promise.all(task_queue);
             count += 1;
         }
-        console.log("stress test finish %d loop", count)
+        // calculate summary
+        query_latency.sort();
+        let p99_latency = query_latency[Math.round(query_latency.length / 100 * 99)];
+        let qps = query_latency.length / test_duration_sec;
+        let avg_latency = query_latency.reduce((acc, val) => acc + val, 0) / query_latency.length;
+        console.log("stress test finish %d loop, qps = %.2f, avg = %.2f, p99 = %.2f", count, qps, avg_latency, p99_latency)
     })
 
 
