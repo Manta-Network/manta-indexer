@@ -176,6 +176,7 @@ pub async fn pull_ledger_diff(
     let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await? as u128;
     drop(timer);
 
+
     Ok(PullResponse {
         should_continue: more_receivers || more_senders,
         receivers,

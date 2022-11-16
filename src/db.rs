@@ -288,7 +288,8 @@ async fn clean_up(conn: &mut SqlitePool, table_name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Shard;
+    use crate::types::{EncryptedNote, PullResponse, Shard};
+    use std::default::Default;
     use sqlx::migrate::MigrateDatabase;
 
     #[tokio::test]
@@ -520,5 +521,78 @@ mod tests {
     async fn transaction_should_work() {
         // todo, ensure db transaction will work as expected
         assert!(true);
+    }
+
+    #[derive(serde::Serialize)]
+    struct NewPRV1 {
+        rlen: usize,
+        r: Vec<u8>,
+        slen: usize,
+        s: Vec<u8>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct NewPRV2 {
+        rlen: usize,
+        r: String,
+        slen: usize,
+        s: String,
+    }
+
+    #[test]
+    fn test_the_optimize_of_pull_response_dense() -> Result<()> {
+        let mut x = PullResponse {
+            should_continue: false,
+            receivers: vec![],
+            senders: vec![],
+            senders_receivers_total: 0,
+        };
+        let default_en = EncryptedNote { ephemeral_public_key: Default::default(), ciphertext: [0u8; 68] };
+        for _ in 0..1024 * 8 {
+            x.receivers.push((Default::default(), default_en.clone()));
+            x.senders.push(Default::default());
+        }
+        let timer = std::time::Instant::now();
+        let d = serde_json::to_string(&x)?;
+        println!("old time = {} ms", timer.elapsed().as_millis());
+
+
+        let mut y = NewPRV1 {
+            rlen: 0,
+            r: Vec::new(),
+            slen: 0,
+            s: Vec::new(),
+        };
+        for _ in 0..1024 * 8 {
+            y.rlen += 1;
+            y.r.extend_from_slice(&[0u8; 132]);
+            y.slen += 1;
+            y.s.extend_from_slice(&[0u8; 32]);
+        }
+        let timer = std::time::Instant::now();
+        let d = serde_json::to_string(&y)?;
+        println!("new v1 time = {} ms", timer.elapsed().as_millis());
+
+        let mut y = NewPRV2 {
+            rlen: 0,
+            r: String::new(),
+            slen: 0,
+            s: String::new(),
+        };
+        let mut r = Vec::new();
+        let mut s = Vec::new();
+        for _ in 0..1024 * 8 {
+            y.rlen += 1;
+            r.extend_from_slice(&[0u8; 132]);
+            y.slen += 1;
+            s.extend_from_slice(&[0u8; 32]);
+        }
+        y.r = base64::encode(r.as_slice());
+        y.s = base64::encode(s.as_slice());
+        let timer = std::time::Instant::now();
+        let d = serde_json::to_string(&y)?;
+        println!("new v2 time = {} ms", timer.elapsed().as_millis());
+
+        Ok(())
     }
 }

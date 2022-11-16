@@ -2307,6 +2307,7 @@ name = "manta-indexer"
 version = "3.4.3-1"
 dependencies = [
  "anyhow",
+ "base64",
  "chrono",
  "criterion",
  "crossbeam",
