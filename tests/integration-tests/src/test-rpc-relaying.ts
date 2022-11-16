@@ -219,7 +219,7 @@ describe("Relaying non subscription rpc methods", function () {
   });
 
   // state_subscribeStorage
-  it("Subscribing storage changes for the provided keys should work", async function () {
+  it.skip("Subscribing storage changes for the provided keys should work", async function () {
     // this is time module, its storage will be updated every 12 seconds.
     const keys = [
       "0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb",
@@ -242,7 +242,7 @@ describe("Relaying non subscription rpc methods", function () {
 
   // Transaction subscriptions
   // This test covers all of rpc methods indxer provides, including subscription rpc.
-  it("Making a normal transaction and subscribtion should work", async function () {
+  it.skip("Making a normal transaction and subscribtion should work", async function () {
     // make a transfer
     const keyring = new Keyring({ type: "sr25519", ss58Format: 78 });
     const aliceSeed = "//Alice";

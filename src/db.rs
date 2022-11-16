@@ -149,12 +149,21 @@ pub async fn insert_one_void_number(
     Ok(())
 }
 
-pub async fn get_len_of_void_number(pool: &SqlitePool) -> Result<usize> {
-    let vns = sqlx::query(r#"SELECT vn FROM void_number;"#)
-        .fetch_all(pool)
+/// Instead of insert with specific idx, just append a new void number record with auto increasing idx primary key.
+pub async fn append_void_number(pool: &SqlitePool, encoded_vn: Vec<u8>) -> Result<()> {
+    let mut conn = pool.acquire().await?;
+    sqlx::query("INSERT INTO void_number (vn) VALUES (?1)")
+        .bind(encoded_vn)
+        .execute(&mut conn)
         .await?;
+    Ok(())
+}
 
-    Ok(vns.len())
+pub async fn get_len_of_void_number(pool: &SqlitePool) -> Result<usize> {
+    Ok(sqlx::query(r#"SELECT count(*) as count FROM void_number;"#)
+        .fetch_one(pool)
+        .await?
+        .get::<u32, _>("count") as usize)
 }
 
 pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
@@ -200,7 +209,7 @@ pub async fn get_one_void_number(pool: &SqlitePool, vn_index: u64) -> Result<Voi
     let one: VoidNumber = one_row
         .get::<Vec<u8>, _>("vn")
         .try_into()
-        .map_err(|_| crate::IndexerError::DecodedError)?;
+        .map_err(|_| crate::errors::IndexerError::DecodedError)?;
 
     Ok(one)
 }
@@ -222,7 +231,7 @@ pub async fn get_batched_void_number(
         let vn: VoidNumber = i
             .get::<Vec<u8>, _>("vn")
             .try_into()
-            .map_err(|_| crate::IndexerError::DecodedError)?;
+            .map_err(|_| crate::errors::IndexerError::DecodedError)?;
         vns.push(vn)
     }
 

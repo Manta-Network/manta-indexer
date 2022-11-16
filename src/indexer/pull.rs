@@ -18,6 +18,7 @@ use crate::constants::*;
 use crate::types::{EncryptedNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
+use frame_support::log::trace;
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
@@ -40,6 +41,7 @@ pub fn calculate_next_checkpoint(
     }
 }
 
+/// pull receivers from local sqlite with given checkpoint indices position.
 #[instrument]
 pub async fn pull_receivers(
     pool: &SqlitePool,
@@ -76,6 +78,11 @@ pub async fn pull_receivers(
     Ok((more_receivers, receivers))
 }
 
+/// pull a specific shard of receivers from local sqlite.
+/// Args:
+///     * `receiver_index`: the beginning from this `shard index`
+///     * `receivers`: mutable chunk to append new receive data in
+///     * `receivers_pulled`: total pulled counter.
 #[instrument]
 pub async fn pull_receivers_for_shard(
     pool: &SqlitePool,
@@ -136,6 +143,7 @@ pub async fn pull_senders(
     ))
 }
 
+/// pull_ledger_diff from local sqlite from given checkpoint position.
 #[instrument]
 pub async fn pull_ledger_diff(
     pool: &SqlitePool,
@@ -143,6 +151,8 @@ pub async fn pull_ledger_diff(
     max_receivers: u64,
     max_senders: u64,
 ) -> Result<PullResponse> {
+    trace!(target: "indexer", "receive a pull_ledger_diff req with max_sender: {}, max_receiver: {}", max_receivers, max_senders);
+
     let (more_receivers, receivers) =
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
     let (more_senders, senders) = pull_senders(pool, checkpoint.sender_index, max_senders).await?;

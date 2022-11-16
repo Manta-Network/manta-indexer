@@ -16,12 +16,15 @@
 
 use crate::constants::MEGABYTE;
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
+use crate::monitoring::IndexerMiddleware;
 use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
     WsServerConfig,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
+
+const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 
 pub async fn start_service() -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
@@ -29,13 +32,13 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let config = crate::utils::read_config()?;
     let full_node = config["indexer"]["configuration"]["full_node"]
         .as_str()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
     let pool_size = config["db"]["configuration"]["pool_size"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)? as u32;
+        .ok_or(crate::errors::IndexerError::WrongConfig)? as u32;
     let db_path = config["db"]["configuration"]["db_path"]
         .as_str()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
 
     // create indexer rpc handler
     let indexer_rpc = MantaPayIndexerServer::new(db_path, pool_size, full_node).await?;
@@ -43,17 +46,26 @@ pub async fn start_service() -> Result<WsServerHandle> {
 
     let port = config["indexer"]["configuration"]["port"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)?;
-    let _frequency = config["indexer"]["configuration"]["frequency"]
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
+    let monitor_port = config["indexer"]["configuration"]["prometheus_port"]
         .as_integer()
-        .ok_or(crate::IndexerError::WrongConfig)?;
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
+    let frequency = config["indexer"]["configuration"]["frequency"]
+        .as_integer()
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
+    if frequency >= FULL_NODE_BLOCK_GEN_INTERVAL_SEC as i64 {
+        bail!(
+            "frequency config({}) is larger than limit({})",
+            frequency,
+            FULL_NODE_BLOCK_GEN_INTERVAL_SEC
+        );
+    }
 
     // create relay rpc handler
     let relayer_rpc = MantaRpcRelayServer::new(full_node).await?;
     module.merge(relayer_rpc.into_rpc())?;
 
-    let content = crate::utils::read_config()?;
-    let config = content["server"]["configuration"].to_string();
+    let config = config["server"]["configuration"].to_string();
     let srv_config: WsServerConfig = toml::from_str(&config)?;
 
     let mut available_methods = module.method_names().collect::<Vec<_>>();
@@ -73,12 +85,14 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .max_response_body_size(srv_config.max_response_body_size * MEGABYTE)
         .ping_interval(srv_config.ping_interval)
         .max_subscriptions_per_connection(srv_config.max_subscriptions_per_connection)
-        // .set_middleware(IndexerMiddleware::default())
-        .set_middleware(crate::logger::IndexerLogger)
+        .set_middleware(IndexerMiddleware::default())
         .build(srv_addr)
         .await?;
 
     let _addr = server.local_addr()?;
     let handle = server.start(module)?;
+
+    let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
+    prometheus_exporter::start(prometheus_addr.parse()?)?;
     Ok(handle)
 }

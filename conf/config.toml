@@ -1,8 +1,13 @@
 [indexer.configuration]
-frequency = 2 # it means pull shards per 2 seconds, and should not be bigger than 12s.
-port = 7788
-rpc_method = "mantaPay_pull_ledger_diff"
+# it means pull shards per 2 seconds, and should not be bigger than 12s.
+frequency = 2
+# connection backend full node
 full_node = "ws://127.0.0.1:9800"
+# full_node = "wss://ws.rococo.dolphin.engineering:443"
+# indexer service port
+port = 7788
+# indexer monitoring port
+prometheus_port = 7789
 
 [server.configuration]
 # all params are default values from substrate
@@ -15,5 +20,8 @@ batch_requests_supported = true
 ping_interval = 30 # in second
 
 [db.configuration]
-db_path = "latest-dolphin-shards.db"
+# sqlite db file path
+# db_path = "latest-dolphin-shards.db"
+db_path = "local_sync.db"
+# connection pool size.
 pool_size = 16

@@ -31,7 +31,7 @@ use toml::Value;
 
 // read project config file
 pub fn read_config() -> Result<Value> {
-    let config = File::open(concat!(env!("CARGO_MANIFEST_DIR"), "/config.toml"))?;
+    let config = File::open(concat!(env!("CARGO_MANIFEST_DIR"), "/conf/config.toml"))?;
     let mut buff = BufReader::new(config);
     let mut contents = String::new();
     buff.read_to_string(&mut contents)?;
@@ -69,7 +69,12 @@ pub fn create_full_doublemap_key(
 }
 
 pub async fn create_ws_client(url: &str) -> Result<WsClient> {
-    let client = WsClientBuilder::default().build(&url).await?;
+    let client = WsClientBuilder::default()
+        .connection_timeout(Duration::from_secs(3))
+        .request_timeout(Duration::from_secs(3))
+        .ping_interval(Duration::from_secs(15))
+        .build(&url)
+        .await?;
 
     Ok(client)
 }
