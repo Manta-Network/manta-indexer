@@ -10,6 +10,7 @@
 				"flags": [
 					"--unsafe-ws-external",
 					"--unsafe-rpc-external",
+					"--rpc-methods=safe",
 					"--rpc-cors=all"
 				]
 			},
@@ -20,6 +21,7 @@
 				"flags": [
 					"--unsafe-ws-external",
 					"--unsafe-rpc-external",
+					"--rpc-methods=safe",
 					"--rpc-cors=all"
 				]
 			},
@@ -30,6 +32,7 @@
 				"flags": [
 					"--unsafe-ws-external",
 					"--unsafe-rpc-external",
+					"--rpc-methods=safe",
 					"--rpc-cors=all"
 				]
 			}
@@ -62,10 +65,10 @@
 						"--unsafe-ws-external",
 						"--unsafe-rpc-external",
 						"--rpc-cors=all",
-						"--rpc-max-response-size=100",
-						"--rpc-max-request-size=100",
+						"--rpc-methods=safe",
 						"--",
-						"--execution=wasm"
+						"--execution=wasm",
+						"--rpc-methods=safe"
 					]
 				}
 			]

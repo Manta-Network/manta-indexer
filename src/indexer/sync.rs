@@ -105,9 +105,17 @@ pub async fn sync_shards_from_full_node(
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
             for (next_index, sh) in shard.iter().enumerate() {
-                let encoded_utxo = sh.encode();
-                crate::db::insert_one_shard(pool, *shard_index, next_index as u64, encoded_utxo)
+                let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
+                if !crate::db::has_shard(pool, *shard_index, next_index as u64 + offset).await {
+                    let encoded_utxo = sh.encode();
+                    crate::db::insert_one_shard(
+                        pool,
+                        *shard_index,
+                        next_index as u64 + offset,
+                        encoded_utxo,
+                    )
                     .await?;
+                }
             }
         }
 
@@ -151,6 +159,7 @@ pub async fn start_sync_shards_job(
 ) -> Result<()> {
     let mut synced_times = 0u32;
     loop {
+        // todo, add error to log
         sync_shards_from_full_node(ws_client, &pool, (max_count.0, max_count.1)).await?;
         synced_times += 1;
         println!("synced shards {synced_times} times");
@@ -159,9 +168,50 @@ pub async fn start_sync_shards_job(
     }
 }
 
+#[cfg(test)]
+pub async fn get_check_point_from_node(ws: &str) -> Result<Checkpoint> {
+    let client = crate::utils::create_ws_client(ws).await?;
+
+    let mut current_checkpoint = Checkpoint::default();
+    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+
+    let mut next_checkpoint = current_checkpoint;
+    loop {
+        let resp = synchronize_shards(
+            &client,
+            &next_checkpoint,
+            max_sender_count,
+            max_receiver_count,
+        )
+        .await?;
+        let shards = reconstruct_shards_from_pull_response(&resp).await?;
+
+        // update next check point
+        super::pull::calculate_next_checkpoint(
+            &shards,
+            &current_checkpoint,
+            &mut next_checkpoint,
+            resp.senders.len(),
+        )
+        .await;
+        println!(
+            "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
+            next_checkpoint,
+            resp.senders.len(),
+            resp.senders_receivers_total
+        );
+        if !resp.should_continue {
+            break;
+        }
+        current_checkpoint = next_checkpoint;
+    }
+
+    Ok(next_checkpoint)
+}
+
 #[instrument]
 pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
-    let client = crate::utils::create_ws_client(ws).await.unwrap();
+    let client = crate::utils::create_ws_client(ws).await?;
 
     let mut current_checkpoint = Checkpoint::default();
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
@@ -182,9 +232,18 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
             for (next_index, sh) in shard.iter().enumerate() {
-                let encoded_utxo = sh.encode();
-                crate::db::insert_one_shard(pool, *shard_index, next_index as u64, encoded_utxo)
+                // if the shard doesn't exist in db, insert it.
+                let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
+                if !crate::db::has_shard(pool, *shard_index, next_index as u64 + offset).await {
+                    let encoded_utxo = sh.encode();
+                    crate::db::insert_one_shard(
+                        pool,
+                        *shard_index,
+                        next_index as u64 + offset,
+                        encoded_utxo,
+                    )
                     .await?;
+                }
             }
         }
 
@@ -321,13 +380,17 @@ mod tests {
     use codec::Decode;
     use manta_xt::dolphin_runtime::runtime_types::pallet_manta_pay::types::TransferPost;
     use manta_xt::{dolphin_runtime, utils, MantaConfig};
+    use rand::distributions::{Distribution, Uniform};
     use std::fs::File;
     use std::io::prelude::*;
     use std::io::BufReader;
 
     async fn mint_one_coin() {
-        let url = "ws://127.0.0.1:9800";
-        let api = utils::create_manta_client::<MantaConfig>(url)
+        let config = crate::utils::read_config().unwrap();
+        let node = config["indexer"]["configuration"]["full_node"]
+            .as_str()
+            .unwrap();
+        let api = utils::create_manta_client::<MantaConfig>(node)
             .await
             .expect("Failed to create client.");
 
@@ -361,6 +424,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn mint_private_coins() {
         let url = "ws://127.0.0.1:9800";
         let api = utils::create_manta_client::<MantaConfig>(url)
@@ -405,7 +469,8 @@ mod tests {
                 .sign_and_submit_then_watch_default(&batched_extrinsic, &signer)
                 .await
                 .unwrap()
-                .wait_for_in_block()
+                // .wait_for_in_block()
+                .wait_for_finalized()
                 .await
                 .unwrap()
                 .block_hash();
@@ -414,41 +479,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn check_last_check_point() {
-        // sync shards from node for the first time
-        let o_db_path = "x123-local-dolphin.db";
-        let c_db_path = "init_shards.db";
-
-        let pool_size = 16u32;
-        let pool = db::initialize_db_pool(o_db_path, pool_size).await.unwrap();
-
-        let last_check_point = db::get_latest_check_point(&pool).await.unwrap();
-        dbg!(&last_check_point);
-
-        let pool = db::initialize_db_pool(c_db_path, pool_size).await.unwrap();
-
-        let current_check_point = db::get_latest_check_point(&pool).await.unwrap();
-        dbg!(&current_check_point);
-    }
-
-    #[tokio::test]
     async fn incremental_synchronization_should_work() {
         // sync shards from node for the first time
-        let db_path = "init_shards.db";
-        let url = "ws://127.0.0.1:9800";
-        let client = crate::utils::create_ws_client(url).await.unwrap();
+        let pool = crate::db::create_test_db_or_first_pull(true).await;
+        assert!(pool.is_ok());
+        let pool = pool.unwrap();
 
-        let api = utils::create_manta_client::<MantaConfig>(url)
+        let config = crate::utils::read_config().unwrap();
+        let node = config["indexer"]["configuration"]["full_node"]
+            .as_str()
+            .unwrap();
+        let client = crate::utils::create_ws_client(node).await.unwrap();
+
+        let api = utils::create_manta_client::<MantaConfig>(&node)
             .await
             .expect("Failed to create client.");
 
-        let pool_size = 16u32;
-        let pool = db::initialize_db_pool(db_path, pool_size).await;
-        assert!(pool.is_ok());
-
-        let pool = pool.unwrap();
         let (max_sender_count, max_receiver_count) = (1024 * 10, 1024 * 10);
-        let frequency = 2;
+        // let frequency = 2;
+        let frequency = config["indexer"]["configuration"]["frequency"]
+            .as_integer()
+            .unwrap() as u64;
         let duplicated_pool = pool.clone();
         let handler = tokio::spawn(async move {
             let _ = start_sync_shards_job(
@@ -465,6 +516,9 @@ mod tests {
         // mint one coin
         mint_one_coin().await;
 
+        // sleep 2 * frequency more seconds.
+        tokio::time::sleep(Duration::from_secs(frequency * 2)).await;
+
         let current_check_point = db::get_latest_check_point(&pool).await.unwrap();
 
         let current_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
@@ -479,7 +533,6 @@ mod tests {
             // ensure
             assert!(current >= last);
             if current > last {
-                dbg!(shard_index, last, current);
                 count += current - last;
                 for i in *last..*current {
                     let _shard = dolphin_runtime::storage()
@@ -500,10 +553,10 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore = "todo, use Georgi's stress test to generate related utxos."]
+    #[ignore]
     async fn quickly_pull_shards_from_full_node() {
         let url = "ws://127.0.0.1:9800";
-        let db_path = "x123-local-dolphin.db";
+        let db_path = "2-has-dolphin.db";
         let pool_size = 16u32;
         let pool = db::initialize_db_pool(db_path, pool_size).await;
         assert!(pool.is_ok());
@@ -517,7 +570,7 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore = "todo, use Georgi's stress test to generate related utxos."]
+    #[ignore]
     async fn bench_pull_ledger_diff_from_sqlite() {
         let db_path = "xdolphin.db";
         let pool_size = 16u32;
@@ -535,7 +588,7 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore = "todo, use Georgi's stress test to generate related utxos."]
+    #[ignore]
     async fn bench_pull_shards_from_local_node() {
         let mut i_sum = 0f32;
         let mut f_sum = 0f32;
@@ -554,67 +607,47 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "todo, use Georgi's stress test to generate related utxos."]
-    async fn pull_ledger_diff_should_work() {
-        let url = "wss://ws.rococo.dolphin.engineering:443";
-        let client = crate::utils::create_ws_client(url).await.unwrap();
-
-        let mut checkpoint = Checkpoint::default();
-        checkpoint.sender_index = 0usize;
-        let (max_sender_count, max_receiver_count) = (1024 * 10, 1024 * 10);
-
-        let resp =
-            synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
-        assert!(resp.unwrap().should_continue);
-    }
-
-    #[tokio::test]
     async fn reconstruct_shards_should_be_correct() {
-        let url = "wss://ws.rococo.dolphin.engineering:443";
-        let client = crate::utils::create_ws_client(url).await.unwrap();
+        // let url = "wss://ws.rococo.dolphin.engineering:443";
+        let config = crate::utils::read_config().unwrap();
+        let node = config["indexer"]["configuration"]["full_node"]
+            .as_str()
+            .unwrap();
+        let client = crate::utils::create_ws_client(node).await.unwrap();
 
         let mut checkpoint = Checkpoint::default();
         checkpoint.sender_index = 0usize;
-        let (max_sender_count, max_receiver_count) = (1024, 1024);
+        let (max_sender_count, max_receiver_count) = (1024 * 16, 1024 * 16);
 
         let resp =
             synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
         let resp = resp.unwrap();
-        assert!(resp.should_continue);
         let shards = reconstruct_shards_from_pull_response(&resp).await.unwrap();
 
-        for (k, shard) in shards.iter() {
-            for sh in shard.iter() {
-                println!(
-                    "k: {}, utxo: {:?}, ephemeral_public_key: {:?}, ciphertext: {:?}",
-                    k,
-                    hex::encode(sh.0),
-                    hex::encode(sh.1.ephemeral_public_key),
-                    hex::encode(sh.1.ciphertext)
-                );
-            }
+        let api = utils::create_manta_client::<MantaConfig>(&node)
+            .await
+            .expect("Failed to create client.");
+
+        // check shards randomly for 5 times
+        for _ in 0..5 {
+            let shard_index_between = Uniform::from(0..=20); // [0, 256)
+            let next_index_between = Uniform::from(0..100);
+            let mut rng = rand::thread_rng();
+            let shard_index = shard_index_between.sample(&mut rng);
+            let next_index = next_index_between.sample(&mut rng);
+            let _shard = dolphin_runtime::storage()
+                .manta_pay()
+                .shards(shard_index as u8, next_index as u64);
+            let onchain_utxo = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+            let reconstructed_utxo =
+                &shards.get(&shard_index).as_ref().unwrap()[next_index as usize];
+
+            assert_eq!(onchain_utxo.0, reconstructed_utxo.0);
+            assert_eq!(
+                onchain_utxo.1.ephemeral_public_key,
+                reconstructed_utxo.1.ephemeral_public_key
+            );
+            assert_eq!(onchain_utxo.1.ciphertext, reconstructed_utxo.1.ciphertext);
         }
-
-        // Get first utxo, ensure it's reconstructed successfully.
-        assert_eq!(
-            hex::encode(&shards.get(&0u8).as_ref().unwrap()[0].0),
-            "5dc4df9b2772ecf49848c7fcb6b96ce7dd2f17c43e25d67719cd7c2659db6817"
-        );
-        assert_eq!(
-            hex::encode(&shards.get(&0u8).as_ref().unwrap()[0].1.ephemeral_public_key),
-            "7a9bb8c7d0afae981506f5c50041d4252cbc7c1fa82f5be6075e429a588ff352"
-        );
-        assert_eq!(
-            hex::encode(&shards.get(&0u8).as_ref().unwrap()[0].1.ciphertext),
-            "4ba8c51afa4ef30a05bfabf7db6a69c80f89eccc8fd0e7c80176386554046b64c3293cfe053ab2f56643fdf15eb5983554a955021b28beaea998899359f95be57d9b6f95"
-        );
-    }
-
-    #[tokio::test]
-    async fn get_storage_hash_should_work() {
-        let url = "wss://ws.rococo.dolphin.engineering:443";
-        let client = crate::utils::create_ws_client(url).await.unwrap();
-        let hash = crate::utils::get_storage_hash(&client).await;
-        assert!(hash.is_ok());
     }
 }

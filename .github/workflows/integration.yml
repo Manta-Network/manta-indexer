@@ -46,7 +46,6 @@ jobs:
               ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
           yarn
           yarn build
-          yarn start ${{ github.workspace }}/.github/resources/dolphin-ci.json
           pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin-ci.json
       - name: Build and Start Indexer 
         run: |
@@ -63,14 +62,5 @@ jobs:
           cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn test-relayer
-      - name: Check First Pulling
-        run: |
-          cd ${{ github.workspace }}
-      - name: Submit Some Mint Extrinsics
-        run: |
-          cd ${{ github.workspace }}/tests/integration-tests
-          yarn
-          yarn mint
-      - name: Check Incremental Synchronization
-        run: |
-          cd ${{ github.workspace }}
+      - name: Run tests
+        run: cargo test
