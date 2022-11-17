@@ -70,10 +70,7 @@ pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> b
             .await;
 
     match one {
-        Ok(utxo) => {
-            println!("utxo: {:?}", utxo);
-            true
-        }
+        Ok(_) => true,
         Err(SqlxError::RowNotFound) => false,
         Err(_) => false, // this case should happen, in theory
     }

@@ -148,7 +148,7 @@ pub async fn sync_shards_from_full_node(
     Ok(())
 }
 
-pub async fn start_sync_shards_job(
+pub async fn start_sync_ledger_job(
     ws_client: &WsClient,
     pool: SqlitePool,
     max_count: (u64, u64),
@@ -519,7 +519,7 @@ mod tests {
             .unwrap() as u64;
         let duplicated_pool = pool.clone();
         let handler = tokio::spawn(async move {
-            let _ = start_sync_shards_job(
+            let _ = start_sync_ledger_job(
                 &client,
                 duplicated_pool,
                 (max_sender_count, max_receiver_count),
@@ -573,7 +573,7 @@ mod tests {
     #[ignore]
     async fn quickly_pull_shards_from_full_node() {
         let url = "ws://127.0.0.1:9800";
-        let db_path = "2-has-dolphin.db";
+        let db_path = "tmp.db";
         let pool_size = 16u32;
         let pool = db::initialize_db_pool(db_path, pool_size).await;
         assert!(pool.is_ok());
@@ -589,7 +589,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn bench_pull_ledger_diff_from_sqlite() {
-        let db_path = "xdolphin.db";
+        let db_path = "tmp.db";
         let pool_size = 16u32;
         let pool = db::initialize_db_pool(db_path, pool_size).await;
         assert!(pool.is_ok());

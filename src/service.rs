@@ -95,17 +95,17 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .build(srv_addr)
         .await?;
 
-    let _addr = server.local_addr()?;
-    let handle = server.start(module)?;
-
-    // start syncing shards job
+    // start to sync utxo
     let ws_client = crate::utils::create_ws_client(full_node).await?;
     // ensure the full node has this rpc method.
     crate::utils::is_the_rpc_methods_existed(&ws_client, rpc_method)
         .await
         .map_err(|_| crate::errors::IndexerError::RpcMethodNotExists)?;
 
-    crate::indexer::sync::start_sync_shards_job(
+    let _addr = server.local_addr()?;
+    let handle = server.start(module)?;
+
+    crate::indexer::sync::start_sync_ledger_job(
         &ws_client,
         db_pool,
         (MAX_RECEIVERS, MAX_SENDERS),
