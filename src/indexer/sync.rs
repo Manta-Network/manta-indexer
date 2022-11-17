@@ -565,7 +565,7 @@ mod tests {
             }
         }
         assert_eq!(count as i64, count_of_new_utxo);
-        assert_eq!(count >= 1);
+        assert!(count >= 1);
         handler.abort();
     }
 
