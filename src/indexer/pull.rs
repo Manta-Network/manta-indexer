@@ -18,11 +18,11 @@ use crate::constants::*;
 use crate::types::{EncryptedNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
+use frame_support::log::{debug, trace};
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
-use tracing::{debug, instrument};
 
 /// Calculate the next checkpoint.
 pub async fn calculate_next_checkpoint(
@@ -42,7 +42,7 @@ pub async fn calculate_next_checkpoint(
     }
 }
 
-#[instrument]
+/// pull receivers from local sqlite with given checkpoint indices position.
 pub async fn pull_receivers(
     pool: &SqlitePool,
     receiver_indices: [usize; 256],
@@ -78,7 +78,11 @@ pub async fn pull_receivers(
     Ok((more_receivers, receivers))
 }
 
-#[instrument]
+/// pull a specific shard of receivers from local sqlite.
+/// Args:
+///     * `receiver_index`: the beginning from this `shard index`
+///     * `receivers`: mutable chunk to append new receive data in
+///     * `receivers_pulled`: total pulled counter.
 pub async fn pull_receivers_for_shard(
     pool: &SqlitePool,
     shard_index: u8,
@@ -112,7 +116,6 @@ pub async fn pull_receivers_for_shard(
     Ok(crate::db::has_shard(pool, shard_index, max_receiver_index).await)
 }
 
-#[instrument]
 pub async fn pull_senders(
     pool: &SqlitePool,
     sender_index: usize,
@@ -140,13 +143,15 @@ pub async fn pull_senders(
     ))
 }
 
-#[instrument]
+/// pull_ledger_diff from local sqlite from given checkpoint position.
 pub async fn pull_ledger_diff(
     pool: &SqlitePool,
     checkpoint: &Checkpoint,
     max_receivers: u64,
     max_senders: u64,
 ) -> Result<PullResponse> {
+    trace!(target: "indexer", "receive a pull_ledger_diff req with max_sender: {}, max_receiver: {}", max_receivers, max_senders);
+
     let (more_receivers, receivers) =
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
     let (more_senders, senders) = pull_senders(pool, checkpoint.sender_index, max_senders).await?;

@@ -17,18 +17,9 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use frame_support::log::info;
 
-mod constants;
-mod db;
-mod errors;
-mod indexer;
-mod logger;
-mod relayer;
-mod service;
-mod types;
-mod utils;
-
-pub use errors::*;
+pub use manta_indexer::errors::*;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<()> {
@@ -36,7 +27,8 @@ async fn main() -> Result<()> {
     // utils::init_logger();
     log4rs::init_file("conf/log.yaml", Default::default())?;
 
-    let _handler = service::start_service().await?;
+    let _handler = manta_indexer::service::start_service().await?;
+    info!(target: "indexer", "indexer has been started successfully!");
     // todo, shutdown server gracefully.
     // if ctr + c {
     //     handler.stop().await?;

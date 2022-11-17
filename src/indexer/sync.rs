@@ -15,9 +15,11 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 ///! Sync shards from full node.
+use crate::constants::PULL_LEDGER_DIFF_METHODS;
 use crate::types::{EncryptedNote, PullResponse, Utxo};
 use anyhow::Result;
 use codec::Encode;
+use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
@@ -29,26 +31,22 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
 use tokio_stream::StreamExt;
-use tracing::instrument;
 
-#[instrument]
-pub async fn synchronize_shards(
+/// sync ledger diff from remote full node using the checkpoint as "beginning point".
+pub async fn synchronize_ledger(
     ws: &WsClient,
-    next_checkpoint: &Checkpoint,
+    checkpoint: &Checkpoint,
     mut max_sender_count: u64,
     mut max_receiver_count: u64,
 ) -> Result<PullResponse> {
-    if max_receiver_count > super::MAX_RECEIVERS || max_sender_count > super::MAX_SENDERS {
-        max_receiver_count = super::MAX_RECEIVERS;
-        max_sender_count = super::MAX_SENDERS;
-    }
-    let params = rpc_params![next_checkpoint, max_sender_count, max_receiver_count];
-
-    let pull_response = ws
-        .request::<PullResponse>("mantaPay_pull_ledger_diff", params)
-        .await?;
-
-    Ok(pull_response)
+    max_receiver_count = max_receiver_count.min(super::MAX_RECEIVERS);
+    max_sender_count = max_sender_count.min(super::MAX_SENDERS);
+    Ok(ws
+        .request::<PullResponse>(
+            PULL_LEDGER_DIFF_METHODS,
+            rpc_params![checkpoint, max_sender_count, max_receiver_count],
+        )
+        .await?)
 }
 
 pub async fn reconstruct_shards_from_pull_response(
@@ -63,7 +61,7 @@ pub async fn reconstruct_shards_from_pull_response(
                 .0
                 .to_vec()
                 .try_into()
-                .map_err(|_| crate::IndexerError::WrongMerkleTreeIndex)?,
+                .map_err(|_| crate::errors::IndexerError::WrongMerkleTreeIndex)?,
         );
         shards
             .entry(shard_index)
@@ -81,7 +79,6 @@ pub async fn reconstruct_shards_from_pull_response(
 4. Save every new shards to each corresponding shard index, and void number.
 5.
 */
-#[instrument]
 pub async fn sync_shards_from_full_node(
     ws_client: &WsClient,
     pool: &SqlitePool,
@@ -92,7 +89,7 @@ pub async fn sync_shards_from_full_node(
 
     let mut next_checkpoint = current_checkpoint;
     loop {
-        let resp = synchronize_shards(
+        let resp = synchronize_ledger(
             ws_client,
             &next_checkpoint,
             max_sender_count,
@@ -162,7 +159,7 @@ pub async fn start_sync_shards_job(
         // todo, add error to log
         sync_shards_from_full_node(ws_client, &pool, (max_count.0, max_count.1)).await?;
         synced_times += 1;
-        println!("synced shards {synced_times} times");
+        info!("synced utxo for {} times.", synced_times);
         // every frequency, start to sync shards from full node.
         tokio::time::sleep(Duration::from_secs(frequency)).await;
     }
@@ -177,7 +174,7 @@ pub async fn get_check_point_from_node(ws: &str) -> Result<Checkpoint> {
 
     let mut next_checkpoint = current_checkpoint;
     loop {
-        let resp = synchronize_shards(
+        let resp = synchronize_ledger(
             &client,
             &next_checkpoint,
             max_sender_count,
@@ -209,51 +206,57 @@ pub async fn get_check_point_from_node(ws: &str) -> Result<Checkpoint> {
     Ok(next_checkpoint)
 }
 
-#[instrument]
 pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await?;
 
     let mut current_checkpoint = Checkpoint::default();
-    let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
+    let (max_sender_count, max_receiver_count) = (1024 * 8, 1024 * 8);
 
-    let mut next_checkpoint = current_checkpoint;
-    let mut times = 0u32;
-    let now = Instant::now();
+    let mut counter = 0;
+    let mut total_items = 0;
+    let mut now = Instant::now();
     loop {
-        let resp = synchronize_shards(
+        let resp = synchronize_ledger(
             &client,
-            &next_checkpoint,
+            &current_checkpoint,
             max_sender_count,
             max_receiver_count,
         )
         .await?;
+        if resp.senders.len() != resp.receivers.len() {
+            error!(
+                target: "indexer",
+                "pull ledger diff sender len({}) != receiver len({}), ckpt = {:?}",
+                resp.senders.len(),
+                resp.receivers.len(),
+                current_checkpoint
+            )
+        }
+
         let shards = reconstruct_shards_from_pull_response(&resp).await?;
 
+        // update receiver shards into sqlite.
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
-            for (next_index, sh) in shard.iter().enumerate() {
-                // if the shard doesn't exist in db, insert it.
-                let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
-                if !crate::db::has_shard(pool, *shard_index, next_index as u64 + offset).await {
-                    let encoded_utxo = sh.encode();
-                    crate::db::insert_one_shard(
-                        pool,
-                        *shard_index,
-                        next_index as u64 + offset,
-                        encoded_utxo,
-                    )
-                    .await?;
-                }
+            for (offset, content) in shard.iter().enumerate() {
+                let encoded_utxo: Vec<u8> = content.encode();
+                let next_index_beginning_offset =
+                    current_checkpoint.receiver_index[*shard_index as usize];
+                crate::db::insert_one_shard(
+                    pool,
+                    *shard_index,
+                    (next_index_beginning_offset + offset) as u64,
+                    encoded_utxo,
+                )
+                .await?;
             }
         }
 
-        // update void number
+        // update sender void number into sqlite.
         let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
-        let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
-        while let Some((idx, vn)) = stream_vns.next().await {
+        while let Some((_, vn)) = stream_vns.next().await {
             let vn: Vec<u8> = (*vn).into();
-            let i = idx + vn_checkpoint;
-            crate::db::insert_one_void_number(pool, i as u64, vn).await?;
+            crate::db::append_void_number(pool, vn).await?;
         }
 
         // update total senders and receivers
@@ -261,33 +264,40 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
 
         // update next check point
-        super::pull::calculate_next_checkpoint(
-            &shards,
-            &current_checkpoint,
-            &mut next_checkpoint,
-            resp.senders.len(),
-        )
-        .await;
-        println!(
-            "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
-            next_checkpoint,
-            resp.senders.len(),
-            resp.senders_receivers_total
+        increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
+        total_items += resp.receivers.len() + resp.senders.len();
+        let time = now.elapsed().as_millis();
+        now = Instant::now();
+        info!(
+            target: "indexer",
+            "sync new loop({}): fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
+            counter,
+            resp.receivers.len(),
+            total_items,
+            resp.senders_receivers_total,
+            time
         );
         if !resp.should_continue {
             break;
         }
-        current_checkpoint = next_checkpoint;
-        times += 1;
-        println!("times: {}", times);
+        counter += 1;
     }
-    let t = now.elapsed().as_secs();
-    println!("time cost: {}", t);
-
     Ok(())
 }
 
-#[instrument]
+/// According to the incremental `pull_ledger_diff` receiver and sender value,
+/// move checkpoint cursor to next beginning offset.
+fn increasing_checkpoint(
+    checkpoint: &mut Checkpoint,
+    incremental_sender: usize,
+    incremental_receiver: &HashMap<u8, Vec<(Utxo, EncryptedNote)>>,
+) {
+    checkpoint.sender_index += incremental_sender;
+    incremental_receiver.iter().for_each(|(idx, utxos)| {
+        checkpoint.receiver_index[*idx as usize] += utxos.len();
+    });
+}
+
 pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
     let client = crate::utils::create_ws_client(url).await?;
 
@@ -300,7 +310,7 @@ pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
     println!("========================");
     loop {
         let now = Instant::now();
-        let resp = synchronize_shards(
+        let resp = synchronize_ledger(
             &client,
             &next_checkpoint,
             max_sender_count,
@@ -334,7 +344,6 @@ pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
     Ok(time_cost)
 }
 
-#[instrument]
 pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
     let mut current_checkpoint = Checkpoint::default();
     let (max_sender_count, max_receiver_count) = (1024 * 15, 1024 * 15);
@@ -421,7 +430,7 @@ mod tests {
             .await
             .unwrap();
         let block_hash = block.block_hash();
-        let events = block.fetch_events().await.unwrap();
+        let _events = block.fetch_events().await.unwrap();
         println!("mint extrinsic submitted: {}", block_hash);
     }
 
@@ -556,6 +565,7 @@ mod tests {
             }
         }
         assert_eq!(count as i64, count_of_new_utxo);
+        assert_eq!(count >= 1);
         handler.abort();
     }
 
@@ -598,19 +608,12 @@ mod tests {
     #[ignore]
     async fn bench_pull_shards_from_local_node() {
         let mut i_sum = 0f32;
-        let mut f_sum = 0f32;
         let indexer = "ws://127.0.0.1:7788";
-        let full_node = "ws://127.0.0.1:9800";
         let times = 3;
         for _i in 0..times {
             i_sum += pull_ledger_diff_from_local_node(indexer).await.unwrap();
         }
         println!("indexer time cost: {} second", i_sum / times as f32);
-
-        for _i in 0..times {
-            f_sum += pull_ledger_diff_from_local_node(full_node).await.unwrap();
-        }
-        println!("full node time cost: {} second", f_sum / times as f32);
     }
 
     #[tokio::test]
@@ -627,7 +630,7 @@ mod tests {
         let (max_sender_count, max_receiver_count) = (1024 * 16, 1024 * 16);
 
         let resp =
-            synchronize_shards(&client, &checkpoint, max_sender_count, max_receiver_count).await;
+            synchronize_ledger(&client, &checkpoint, max_sender_count, max_receiver_count).await;
         let resp = resp.unwrap();
         let shards = reconstruct_shards_from_pull_response(&resp).await.unwrap();
 

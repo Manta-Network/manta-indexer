@@ -218,28 +218,6 @@ describe("Relaying non subscription rpc methods", function () {
     }, 2000);
   });
 
-  // state_subscribeStorage
-  it("Subscribing storage changes for the provided keys should work", async function () {
-    // this is time module, its storage will be updated every 12 seconds.
-    const keys = [
-      "0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb",
-    ];
-    let currentStorage = "";
-    const unsubscribe =
-      await indexerApi.rpc.state.subscribeStorage<StorageChangeSet>(
-        keys,
-        (storageChanges) => {
-          currentStorage = storageChanges.toString();
-          assert.equal(currentStorage.length, 18);
-        }
-      );
-
-    setTimeout(() => {
-      unsubscribe();
-      console.log("Unsubscribed");
-    }, 2000);
-  });
-
   // Transaction subscriptions
   // This test covers all of rpc methods indxer provides, including subscription rpc.
   it("Making a normal transaction and subscribtion should work", async function () {

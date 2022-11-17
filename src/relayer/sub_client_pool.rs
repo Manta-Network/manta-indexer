@@ -29,10 +29,22 @@ use jsonrpsee::{
     ws_client::{WsClient, WsClientBuilder},
     SubscriptionSink,
 };
+use once_cell::sync::Lazy;
+use prometheus::{register_int_gauge, IntGauge};
 use serde::{Deserialize, Serialize};
 use std::{future::Future, sync::Arc, time::Duration};
 
+use crate::monitoring::indexer_relay_opts;
+
 type OnceJob = Arc<dyn Send + Sync + Fn() -> std::pin::Pin<Box<dyn Future<Output = ()>>>>;
+
+static RELAYING_SUB_CHANNEL_NUM: Lazy<IntGauge> = Lazy::new(|| {
+    let opts = indexer_relay_opts(
+        "relaying_sub_channel_num",
+        "count the amount of channel existed now to relay subscribe data from indexer to dapp",
+    );
+    register_int_gauge!(opts).expect("relaying_sub_channel_num alloc fail")
+});
 
 /// Here's version 1 subscription indexer relaying client.
 /// It manage subscription with a M to M mapping. each new subscription **from a single Dapp connection**
@@ -140,6 +152,7 @@ impl MtoMSubClientPool {
         let sub_channel = Box::pin(sub_channel);
 
         tokio::spawn(async move {
+            RELAYING_SUB_CHANNEL_NUM.inc();
             match sink.pipe_from_stream(sub_channel).await {
                 SubscriptionClosed::Success => {
                     let err_obj: ErrorObjectOwned = SubscriptionClosed::Success.into();
@@ -150,6 +163,7 @@ impl MtoMSubClientPool {
                     sink.close(e);
                 }
             }
+            RELAYING_SUB_CHANNEL_NUM.dec();
         });
         Ok(())
     }
