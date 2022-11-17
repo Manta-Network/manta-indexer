@@ -16,7 +16,7 @@
 
 use crate::types::{SenderChunk, Shard, VoidNumber};
 use anyhow::Result;
-use manta_pay::signer::Checkpoint;
+use manta_pay::config::utxo::v2::Checkpoint;
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqlitePool, SqlitePoolOptions},

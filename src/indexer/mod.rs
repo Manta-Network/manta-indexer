@@ -19,7 +19,7 @@ use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::Checkpoint;
+use manta_pay::config::utxo::v2::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 
 pub mod pull;

@@ -19,7 +19,7 @@ use crate::types::{EncryptedNote, PullResponse, ReceiverChunk, SenderChunk, Utxo
 use anyhow::Result;
 use codec::Decode;
 use frame_support::log::{debug, trace};
-use manta_pay::signer::Checkpoint;
+use manta_pay::config::utxo::v2::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
