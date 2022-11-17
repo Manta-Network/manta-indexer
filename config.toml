@@ -15,5 +15,5 @@ batch_requests_supported = true
 ping_interval = 30 # in second
 
 [db.configuration]
-db_path = "latest-dolphin-shards.db"
+db_path = "utxo.db"
 pool_size = 16

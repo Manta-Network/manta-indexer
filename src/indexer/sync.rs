@@ -387,10 +387,11 @@ mod tests {
 
     async fn mint_one_coin() {
         let config = crate::utils::read_config().unwrap();
-        let node = config["indexer"]["configuration"]["full_node"]
-            .as_str()
+        let port = config["indexer"]["configuration"]["port"]
+            .as_integer()
             .unwrap();
-        let api = utils::create_manta_client::<MantaConfig>(node)
+        let indexer_address = format!("ws://127.0.0.1:{port}");
+        let api = utils::create_manta_client::<MantaConfig>(&indexer_address)
             .await
             .expect("Failed to create client.");
 
@@ -411,23 +412,28 @@ mod tests {
         let mint = dolphin_runtime::tx()
             .manta_pay()
             .to_private(TransferPost::decode(&mut coin).unwrap());
-        let block_hash = api
+        let block = api
             .tx()
             .sign_and_submit_then_watch_default(&mint, &signer)
             .await
             .unwrap()
-            .wait_for_in_block()
+            .wait_for_finalized() // for utxo syncing, we only query finalized chain state.
             .await
-            .unwrap()
-            .block_hash();
+            .unwrap();
+        let block_hash = block.block_hash();
+        let events = block.fetch_events().await.unwrap();
         println!("mint extrinsic submitted: {}", block_hash);
     }
 
     #[tokio::test]
     #[ignore]
     async fn mint_private_coins() {
-        let url = "ws://127.0.0.1:9800";
-        let api = utils::create_manta_client::<MantaConfig>(url)
+        let config = crate::utils::read_config().unwrap();
+        let port = config["indexer"]["configuration"]["port"]
+            .as_integer()
+            .unwrap();
+        let indexer_address = format!("ws://127.0.0.1:{port}");
+        let api = utils::create_manta_client::<MantaConfig>(&indexer_address)
             .await
             .expect("Failed to create client.");
 
@@ -469,7 +475,6 @@ mod tests {
                 .sign_and_submit_then_watch_default(&batched_extrinsic, &signer)
                 .await
                 .unwrap()
-                // .wait_for_in_block()
                 .wait_for_finalized()
                 .await
                 .unwrap()
@@ -491,12 +496,15 @@ mod tests {
             .unwrap();
         let client = crate::utils::create_ws_client(node).await.unwrap();
 
-        let api = utils::create_manta_client::<MantaConfig>(&node)
+        let port = config["indexer"]["configuration"]["port"]
+            .as_integer()
+            .unwrap();
+        let indexer_address = format!("ws://127.0.0.1:{port}");
+        let api = utils::create_manta_client::<MantaConfig>(&indexer_address)
             .await
             .expect("Failed to create client.");
 
         let (max_sender_count, max_receiver_count) = (1024 * 10, 1024 * 10);
-        // let frequency = 2;
         let frequency = config["indexer"]["configuration"]["frequency"]
             .as_integer()
             .unwrap() as u64;
@@ -530,7 +538,6 @@ mod tests {
             .zip(current_check_point.receiver_index.iter())
             .enumerate()
         {
-            // ensure
             assert!(current >= last);
             if current > last {
                 count += current - last;
