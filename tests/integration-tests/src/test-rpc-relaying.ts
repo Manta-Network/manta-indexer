@@ -236,7 +236,7 @@ describe("Relaying non subscription rpc methods", function () {
     // transfer 10 tokens from alice to bob
     const amount = 10;
     const decimal = indexerApi.registry.chainDecimals;
-    const factor = new BN(10).pow(new BN(decimal));
+    const factor = new BN(0.5).pow(new BN(decimal));
     const toTransfer = new BN(amount).mul(factor);
     const unsub = await indexerApi.tx.balances
       .transfer(bob.address, toTransfer)
