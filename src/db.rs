@@ -62,11 +62,12 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
 pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> bool {
     let n = next_index as i64;
 
-    let one = sqlx::query("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1 and next_index = ?2;")
-        .bind(shard_index)
-        .bind(n)
-        .fetch_one(pool)
-        .await;
+    let one: Result<Shard, _> =
+        sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+            .bind(shard_index)
+            .bind(n)
+            .fetch_one(pool)
+            .await;
 
     match one {
         Ok(_) => true,
@@ -79,7 +80,7 @@ pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> b
 pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> Result<Shard> {
     let n = next_index as i64;
 
-    let one = sqlx::query_as("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+    let one = sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and next_index = ?2;")
         .bind(shard_index)
         .bind(n)
         .fetch_one(pool)
@@ -99,12 +100,14 @@ pub async fn get_batched_shards(
     let from = from_next_index as i64;
     let to = to_next_index as i64;
 
-    let batched_shard = sqlx::query_as("SELECT shard_index, next_index, utxo FROM shards WHERE shard_index = ?1 and next_index BETWEEN ?2 and ?3;")
-        .bind(shard_index)
-        .bind(from)
-        .bind(to)
-        .fetch_all(pool)
-        .await;
+    let batched_shard = sqlx::query_as(
+        "SELECT * FROM shards WHERE shard_index = ?1 and next_index BETWEEN ?2 and ?3;",
+    )
+    .bind(shard_index)
+    .bind(from)
+    .bind(to)
+    .fetch_all(pool)
+    .await;
 
     batched_shard.map_err(From::from)
 }
@@ -172,15 +175,15 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
     let mut stream = tokio_stream::iter(0..=255u8);
     // If there's no any shard in db, return default checkpoint.
     while let Some(shard_index) = stream.next().await {
-        let batched_shard: Vec<Shard> =
-            sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?;")
+        let count_of_utxo: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM shards WHERE shard_index = ?;")
                 .bind(shard_index)
-                .fetch_all(pool)
+                .fetch_one(pool)
                 .await?;
 
-        ckp.receiver_index[shard_index as usize] = batched_shard.len();
+        ckp.receiver_index[shard_index as usize] = count_of_utxo.0 as usize;
     }
-    ckp.sender_index = ckp.receiver_index.iter().sum();
+    ckp.sender_index = get_len_of_void_number(pool).await?;
 
     Ok(ckp)
 }
@@ -286,71 +289,104 @@ async fn clean_up(conn: &mut SqlitePool, table_name: &str) -> Result<()> {
 }
 
 #[cfg(test)]
+pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
+    let config = crate::utils::read_config().unwrap();
+    let node = config["indexer"]["configuration"]["full_node"]
+        .as_str()
+        .unwrap();
+
+    let db_path = if is_tmp {
+        let tmp_db = tempfile::Builder::new()
+            .prefix("tmp-utxo")
+            .suffix(&".db")
+            .tempfile()
+            .unwrap();
+        let db_path = tmp_db.path().to_str().unwrap();
+        db_path.to_string()
+    } else {
+        let db_path = config["db"]["configuration"]["db_path"].as_str().unwrap();
+        db_path.to_string()
+    };
+    let pool_size = 16u32;
+    let pool = initialize_db_pool(&db_path, pool_size).await?;
+
+    // if the db is empty, pull utxos.
+    if let Err(_) | Ok(0) = get_len_of_void_number(&pool).await {
+        crate::indexer::sync::pull_all_shards_to_db(&pool, node).await?;
+    }
+
+    Ok(pool)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::Shard;
-    use sqlx::migrate::MigrateDatabase;
+    use rand::distributions::{Distribution, Uniform};
 
     #[tokio::test]
-    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn do_migration_should_work() {
-        let db_path = "dolphin-shards.db";
-        let pool_size = 16u32;
-        let pool = initialize_db_pool(db_path, pool_size).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
     }
 
     #[tokio::test]
-    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn get_one_shard_should_work() {
-        let db_path = "dolphin-shards.db";
-        let pool_size = 16u32;
-        let pool = initialize_db_pool(db_path, pool_size).await;
+        let pool = create_test_db_or_first_pull(false).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
-        let shard_index = 200u8;
-        let next_index = 10u64;
+        let shard_index_between = Uniform::from(0..=255); // [0, 256)
+        let next_index_between = Uniform::from(0..300);
+        let mut rng = rand::thread_rng();
+        let shard_index = shard_index_between.sample(&mut rng);
+        let next_index = next_index_between.sample(&mut rng);
         let one_shard = get_one_shard(&pool, shard_index, next_index).await;
 
         assert!(one_shard.is_ok());
-        dbg!(&one_shard);
         assert_eq!(one_shard.as_ref().unwrap().shard_index, shard_index);
     }
 
     #[tokio::test]
-    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn has_shard_should_work() {
-        let db_path = "dolphin-shards.db";
-        let pool_size = 16u32;
-        let pool = initialize_db_pool(db_path, pool_size).await;
+        let pool = create_test_db_or_first_pull(false).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
-        let shard_index = 200u8;
-        let next_index = 10u64;
+        let shard_index_between = Uniform::from(0..=255); // [0, 256)
+        let next_index_between = Uniform::from(0..300);
+        let mut rng = rand::thread_rng();
+        let shard_index = shard_index_between.sample(&mut rng);
+        let next_index = next_index_between.sample(&mut rng);
         assert!(has_shard(&pool, shard_index, next_index).await);
 
-        let invalid_next_index = 10_000_000_000u64;
+        let invalid_next_index = u64::MAX;
 
         // This shard should not exist.
         assert!(!has_shard(&pool, shard_index, invalid_next_index).await);
     }
 
     #[tokio::test]
-    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn get_batched_shards_should_work() {
-        let db_path = "dolphin-shards.db";
-        let pool_size = 16u32;
-        let pool = initialize_db_pool(db_path, pool_size).await;
+        let pool = create_test_db_or_first_pull(false).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
-        let shard_index = 200u8;
-        let (from_next_index, to_next_index) = (10u64, 30u64);
+        let shard_index_between = Uniform::from(0..=255); // [0, 256)
+        let next_index_between = Uniform::from(0..300);
+        let mut rng = rand::thread_rng();
+        let shard_index = shard_index_between.sample(&mut rng);
+        let mut from_next_index = next_index_between.sample(&mut rng);
+        let mut to_next_index = next_index_between.sample(&mut rng);
+
+        if to_next_index < from_next_index {
+            std::mem::swap(&mut to_next_index, &mut from_next_index);
+        }
+        assert!(to_next_index > from_next_index);
+
         let batched_shards =
             get_batched_shards(&pool, shard_index, from_next_index, to_next_index).await;
 
@@ -366,20 +402,15 @@ mod tests {
     #[tokio::test]
     async fn insert_one_shard_should_work() {
         let tmp_db = tempfile::Builder::new()
-            .prefix("tmp-shards")
+            .prefix("tmp-utxo")
             .suffix(&".db")
             .tempfile()
             .unwrap();
         let db_url = tmp_db.path().to_str().unwrap();
-        if let Ok(true) = sqlx::sqlite::Sqlite::database_exists(&db_url).await {
-            ();
-        } else {
-            sqlx::sqlite::CREATE_DB_WAL.store(true, std::sync::atomic::Ordering::Release);
-            assert!(sqlx::sqlite::Sqlite::create_database(db_url).await.is_ok());
-        }
 
         let pool = initialize_db_pool(db_url, 16).await;
         assert!(pool.is_ok());
+
         let mut pool = pool.unwrap();
 
         let utxo = vec![100u8; 132];
@@ -406,34 +437,36 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "todo, use Georgi's stress test to generate related utxos"]
     async fn get_latest_check_point_should_work() {
-        let db_path = "dolphin-shards.db";
-        let pool_size = 16u32;
-        let pool = initialize_db_pool(db_path, pool_size).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
-        let ckp = get_latest_check_point(&pool).await;
-        assert_eq!(ckp.as_ref().unwrap().sender_index, 102612);
+        let ckp_from_db = get_latest_check_point(&pool).await.unwrap();
+
+        // get check point from full node
+        let config = crate::utils::read_config().unwrap();
+        let node = config["indexer"]["configuration"]["full_node"]
+            .as_str()
+            .unwrap();
+        let ckp_from_node = crate::indexer::sync::get_check_point_from_node(node)
+            .await
+            .unwrap();
+
+        // compare both check points
+        assert_eq!(ckp_from_db.sender_index, ckp_from_node.sender_index);
+        assert_eq!(ckp_from_db.receiver_index, ckp_from_node.receiver_index);
     }
 
     #[tokio::test]
     async fn insert_void_numbers_should_work() {
         let tmp_db = tempfile::Builder::new()
-            .prefix("tmp-shards")
+            .prefix("tmp-utxo")
             .suffix(&".db")
             .tempfile()
             .unwrap();
         let db_url = tmp_db.path().to_str().unwrap();
-        if let Ok(true) = sqlx::sqlite::Sqlite::database_exists(&db_url).await {
-            ();
-        } else {
-            sqlx::sqlite::CREATE_DB_WAL.store(true, std::sync::atomic::Ordering::Release);
-            assert!(sqlx::sqlite::Sqlite::create_database(db_url).await.is_ok());
-        }
-
         let pool = initialize_db_pool(db_url, 16).await;
         assert!(pool.is_ok());
         let pool = pool.unwrap();
@@ -469,17 +502,11 @@ mod tests {
     #[tokio::test]
     async fn check_and_update_total_senders_receivers_should_work() {
         let tmp_db = tempfile::Builder::new()
-            .prefix("tmp-shards")
+            .prefix("tmp-utxo")
             .suffix(&".db")
             .tempfile()
             .unwrap();
         let db_url = tmp_db.path().to_str().unwrap();
-        if let Ok(true) = sqlx::sqlite::Sqlite::database_exists(&db_url).await {
-            ();
-        } else {
-            sqlx::sqlite::CREATE_DB_WAL.store(true, std::sync::atomic::Ordering::Release);
-            assert!(sqlx::sqlite::Sqlite::create_database(db_url).await.is_ok());
-        }
 
         let pool = initialize_db_pool(db_url, 16).await;
         assert!(pool.is_ok());

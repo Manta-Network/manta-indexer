@@ -3,6 +3,7 @@ name = "manta-indexer"
 version = "3.4.3-1"
 edition = "2021"
 rust-version = "1.58"
+default-run = "manta-indexer"
 homepage = 'https://manta.network'
 license = 'GPL-3.0'
 repository = 'https://github.com/Manta-Network/manta-indexer/'
@@ -21,13 +22,12 @@ sp-runtime = { git = 'https://github.com/paritytech/substrate.git', branch = "po
 sp-version = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
 
 # log crates
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 log4rs = "1.2"
 
 # manta deps
 manta-crypto = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4" }
 manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4", features = ["groth16", "scale", "serde"] }
+manta-util = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.4" }
 
 # general crates
 chrono = "0.4.22"
@@ -51,6 +51,7 @@ once_cell = "1.16"
 
 [dev-dependencies]
 criterion = "0.4.0"
+manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git" }
 rand = "0.8.5"
 tempfile = "3.3.0"
 

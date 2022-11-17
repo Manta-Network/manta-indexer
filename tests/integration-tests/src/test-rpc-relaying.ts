@@ -218,31 +218,9 @@ describe("Relaying non subscription rpc methods", function () {
     }, 2000);
   });
 
-  // state_subscribeStorage
-  it.skip("Subscribing storage changes for the provided keys should work", async function () {
-    // this is time module, its storage will be updated every 12 seconds.
-    const keys = [
-      "0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb",
-    ];
-    let currentStorage = "";
-    const unsubscribe =
-      await indexerApi.rpc.state.subscribeStorage<StorageChangeSet>(
-        keys,
-        (storageChanges) => {
-          currentStorage = storageChanges.toString();
-          assert.equal(currentStorage.length, 18);
-        }
-      );
-
-    setTimeout(() => {
-      unsubscribe();
-      console.log("Unsubscribed");
-    }, 2000);
-  });
-
   // Transaction subscriptions
   // This test covers all of rpc methods indxer provides, including subscription rpc.
-  it.skip("Making a normal transaction and subscribtion should work", async function () {
+  it("Making a normal transaction and subscribtion should work", async function () {
     // make a transfer
     const keyring = new Keyring({ type: "sr25519", ss58Format: 78 });
     const aliceSeed = "//Alice";
@@ -258,7 +236,7 @@ describe("Relaying non subscription rpc methods", function () {
     // transfer 10 tokens from alice to bob
     const amount = 10;
     const decimal = indexerApi.registry.chainDecimals;
-    const factor = new BN(10).pow(new BN(decimal));
+    const factor = new BN(0.5).pow(new BN(decimal));
     const toTransfer = new BN(amount).mul(factor);
     const unsub = await indexerApi.tx.balances
       .transfer(bob.address, toTransfer)

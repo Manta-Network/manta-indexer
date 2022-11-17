@@ -18,14 +18,14 @@ use crate::constants::*;
 use crate::types::{EncryptedNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
-use frame_support::log::trace;
+use frame_support::log::{debug, trace};
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
-use tracing::{debug, instrument};
+use tokio_stream::StreamExt;
 
 /// Calculate the next checkpoint.
-pub fn calculate_next_checkpoint(
+pub async fn calculate_next_checkpoint(
     previous_shards: &HashMap<u8, Vec<(Utxo, EncryptedNote)>>,
     previous_checkpoint: &Checkpoint,
     next_checkpoint: &mut Checkpoint,
@@ -33,7 +33,8 @@ pub fn calculate_next_checkpoint(
 ) {
     // point to next void number
     next_checkpoint.sender_index += sender_index;
-    for (i, utxos) in previous_shards.iter() {
+    let mut stream_shards = tokio_stream::iter(previous_shards.iter());
+    while let Some((i, utxos)) = stream_shards.next().await {
         let index = *i as usize;
         // offset for next shard
         next_checkpoint.receiver_index[index] =
@@ -42,7 +43,6 @@ pub fn calculate_next_checkpoint(
 }
 
 /// pull receivers from local sqlite with given checkpoint indices position.
-#[instrument]
 pub async fn pull_receivers(
     pool: &SqlitePool,
     receiver_indices: [usize; 256],
@@ -83,7 +83,6 @@ pub async fn pull_receivers(
 ///     * `receiver_index`: the beginning from this `shard index`
 ///     * `receivers`: mutable chunk to append new receive data in
 ///     * `receivers_pulled`: total pulled counter.
-#[instrument]
 pub async fn pull_receivers_for_shard(
     pool: &SqlitePool,
     shard_index: u8,
@@ -102,7 +101,8 @@ pub async fn pull_receivers_for_shard(
             .await?;
 
     let mut idx = receiver_index;
-    for shard in shards {
+    let mut stream_shards = tokio_stream::iter(shards.iter());
+    while let Some(shard) = stream_shards.next().await {
         if *receivers_pulled == max_update {
             return Ok(crate::db::has_shard(pool, shard_index, idx as u64).await);
         }
@@ -116,27 +116,27 @@ pub async fn pull_receivers_for_shard(
     Ok(crate::db::has_shard(pool, shard_index, max_receiver_index).await)
 }
 
-#[instrument]
 pub async fn pull_senders(
     pool: &SqlitePool,
     sender_index: usize,
     max_update_request: u64,
 ) -> Result<(bool, SenderChunk)> {
-    let mut senders = Vec::new();
     let max_sender_index = if max_update_request > PULL_MAX_SENDER_UPDATE_SIZE {
         (sender_index as u64) + PULL_MAX_SENDER_UPDATE_SIZE
     } else {
         (sender_index as u64) + max_update_request
     };
-    // let batched_vns = crate::db::get_batched_void_number(pool, sender_index, max_sender_index - 1).await?;
-    // todo, batch reads instead of read vn one by one.
 
-    for idx in (sender_index as u64)..max_sender_index {
-        match crate::db::get_one_void_number(pool, idx).await {
-            Ok(next) => senders.push(next),
-            _ => return Ok((false, senders)),
-        }
-    }
+    let senders = if crate::db::has_void_number(pool, max_sender_index - 1).await {
+        crate::db::get_batched_void_number(pool, sender_index as u64, max_sender_index - 1).await?
+    } else {
+        let length_of_vns = crate::db::get_len_of_void_number(pool).await? as u64;
+        let senders =
+            crate::db::get_batched_void_number(pool, sender_index as u64, length_of_vns - 1)
+                .await?;
+        return Ok((false, senders));
+    };
+
     Ok((
         crate::db::has_void_number(pool, max_sender_index as u64).await,
         senders,
@@ -144,7 +144,6 @@ pub async fn pull_senders(
 }
 
 /// pull_ledger_diff from local sqlite from given checkpoint position.
-#[instrument]
 pub async fn pull_ledger_diff(
     pool: &SqlitePool,
     checkpoint: &Checkpoint,

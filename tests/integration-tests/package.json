@@ -8,7 +8,9 @@
   "scripts": {
     "lint:write": "prettier --write .",
     "debug": "tsc --project ./ && node dist/test-indexer.js",
+    "mint": "tsc --project ./ && node dist/mint-private-coins.js",
     "test-relayer": "mocha --timeout 60000 --reporter-options maxDiffSize=8192000 -r ts-node/register src/test-rpc-relaying.ts",
+    "test-indexer": "mocha --timeout 60000 --reporter-options maxDiffSize=8192000 -r ts-node/register src/test-indexer.ts",
     "block-production": "mocha --timeout 60000 -r ts-node/register src/check-bp.ts",
     "stress-test": "mocha --timeout 120000 -r ts-node/register src/stress-test.ts"
   },

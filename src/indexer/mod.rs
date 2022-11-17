@@ -15,15 +15,12 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::types::PullResponse;
-use anyhow::Result;
 use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
-    ws_client::WsClient,
 };
 use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
-use std::sync::Arc;
 
 pub mod pull;
 pub mod sync;
@@ -45,8 +42,6 @@ pub trait MantaPayIndexerApi {
 pub struct MantaPayIndexerServer {
     // db pool
     pub db_pool: SqlitePool,
-    // the websocket client connects to local full node
-    pub full_node: Arc<WsClient>,
 }
 
 #[async_trait]
@@ -76,13 +71,7 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
 }
 
 impl MantaPayIndexerServer {
-    pub async fn new(db_url: &str, pool_size: u32, full_node: &str) -> Result<Self> {
-        let db_pool = crate::db::initialize_db_pool(db_url, pool_size).await?;
-        let full_node = crate::utils::create_ws_client(full_node).await?;
-
-        Ok(MantaPayIndexerServer {
-            db_pool,
-            full_node: Arc::new(full_node),
-        })
+    pub fn new(db_pool: SqlitePool) -> Self {
+        Self { db_pool }
     }
 }

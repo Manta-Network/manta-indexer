@@ -16,6 +16,7 @@
 
 use crate::constants::MEGABYTE;
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
+use crate::indexer::{MAX_RECEIVERS, MAX_SENDERS};
 use crate::monitoring::IndexerMiddleware;
 use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
@@ -33,6 +34,9 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let full_node = config["indexer"]["configuration"]["full_node"]
         .as_str()
         .ok_or(crate::errors::IndexerError::WrongConfig)?;
+    let rpc_method = config["indexer"]["configuration"]["rpc_method"]
+        .as_str()
+        .ok_or(crate::errors::IndexerError::WrongConfig)?;
     let pool_size = config["db"]["configuration"]["pool_size"]
         .as_integer()
         .ok_or(crate::errors::IndexerError::WrongConfig)? as u32;
@@ -40,8 +44,10 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .as_str()
         .ok_or(crate::errors::IndexerError::WrongConfig)?;
 
+    let db_pool = crate::db::initialize_db_pool(db_path, pool_size).await?;
+
     // create indexer rpc handler
-    let indexer_rpc = MantaPayIndexerServer::new(db_path, pool_size, full_node).await?;
+    let indexer_rpc = MantaPayIndexerServer::new(db_pool.clone());
     module.merge(indexer_rpc.into_rpc())?;
 
     let port = config["indexer"]["configuration"]["port"]
@@ -52,8 +58,8 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .ok_or(crate::errors::IndexerError::WrongConfig)?;
     let frequency = config["indexer"]["configuration"]["frequency"]
         .as_integer()
-        .ok_or(crate::errors::IndexerError::WrongConfig)?;
-    if frequency >= FULL_NODE_BLOCK_GEN_INTERVAL_SEC as i64 {
+        .ok_or(crate::errors::IndexerError::WrongConfig)? as u64;
+    if frequency >= FULL_NODE_BLOCK_GEN_INTERVAL_SEC as u64 {
         bail!(
             "frequency config({}) is larger than limit({})",
             frequency,
@@ -89,8 +95,23 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .build(srv_addr)
         .await?;
 
+    // start to sync utxo
+    let ws_client = crate::utils::create_ws_client(full_node).await?;
+    // ensure the full node has this rpc method.
+    crate::utils::is_the_rpc_methods_existed(&ws_client, rpc_method)
+        .await
+        .map_err(|_| crate::errors::IndexerError::RpcMethodNotExists)?;
+
     let _addr = server.local_addr()?;
     let handle = server.start(module)?;
+
+    crate::indexer::sync::start_sync_ledger_job(
+        &ws_client,
+        db_pool,
+        (MAX_RECEIVERS, MAX_SENDERS),
+        frequency,
+    )
+    .await?;
 
     let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
     prometheus_exporter::start(prometheus_addr.parse()?)?;
