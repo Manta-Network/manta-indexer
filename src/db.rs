@@ -14,8 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{SenderChunk, Shard, VoidNumber};
+use crate::types::{NullifierCommitment, OutgoingNote, SenderChunk, Shard};
 use anyhow::Result;
+use codec::{Decode, Encode};
 use manta_pay::config::utxo::v2::Checkpoint;
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
@@ -135,35 +136,51 @@ pub async fn insert_one_shard(
     Ok(())
 }
 
-pub async fn insert_one_void_number(
+pub async fn insert_one_nullifier(
     pool: &SqlitePool,
-    vn_index: u64,
-    encoded_vn: Vec<u8>,
+    nullifier_index: u64,
+    nc: &NullifierCommitment,
+    on: &OutgoingNote,
 ) -> Result<()> {
-    let n = vn_index as i64;
+    let n = nullifier_index as i64;
 
     let mut conn = pool.acquire().await?;
-    let _row_at = sqlx::query("INSERT INTO void_number (idx, vn) VALUES (?1, ?2)")
-        .bind(n)
-        .bind(encoded_vn)
-        .execute(&mut conn)
-        .await;
+    let mut tx = conn.begin().await?;
+    let _row_at = sqlx::query(
+        "INSERT INTO nullifier (idx, nullifier_commitment, outgoing_note) VALUES (?1, ?2, ?3);",
+    )
+    .bind(n)
+    .bind(nc.encode())
+    .bind(on.encode())
+    .execute(&mut tx)
+    .await;
+
+    tx.commit().await?;
 
     Ok(())
 }
 
 /// Instead of insert with specific idx, just append a new void number record with auto increasing idx primary key.
-pub async fn append_void_number(pool: &SqlitePool, encoded_vn: Vec<u8>) -> Result<()> {
+pub async fn append_nullifier(
+    pool: &SqlitePool,
+    nc: &NullifierCommitment,
+    on: &OutgoingNote,
+) -> Result<()> {
     let mut conn = pool.acquire().await?;
-    sqlx::query("INSERT INTO void_number (vn) VALUES (?1)")
-        .bind(encoded_vn)
-        .execute(&mut conn)
+    let mut tx = conn.begin().await?;
+
+    sqlx::query("INSERT INTO nullifier (nullifier_commitment, outgoing_note) VALUES (?1, ?2)")
+        .bind(nc.encode())
+        .bind(on.encode())
+        .execute(&mut tx)
         .await?;
+    tx.commit().await?;
+
     Ok(())
 }
 
-pub async fn get_len_of_void_number(pool: &SqlitePool) -> Result<usize> {
-    Ok(sqlx::query(r#"SELECT count(*) as count FROM void_number;"#)
+pub async fn get_len_of_nullifier(pool: &SqlitePool) -> Result<usize> {
+    Ok(sqlx::query(r#"SELECT count(*) as count FROM nullifier;"#)
         .fetch_one(pool)
         .await?
         .get::<u32, _>("count") as usize)
@@ -183,15 +200,15 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
 
         ckp.receiver_index[shard_index as usize] = count_of_utxo.0 as usize;
     }
-    ckp.sender_index = get_len_of_void_number(pool).await?;
+    ckp.sender_index = get_len_of_nullifier(pool).await?;
 
     Ok(ckp)
 }
 
 /// Whether the void number exists in the db or not.
-pub async fn has_void_number(pool: &SqlitePool, vn_index: u64) -> bool {
-    let n = vn_index as i64;
-    let one = sqlx::query("SELECT vn FROM void_number WHERE idx = ?1;")
+pub async fn has_nullifier(pool: &SqlitePool, nullifier_index: u64) -> bool {
+    let n = nullifier_index as i64;
+    let one = sqlx::query("SELECT nullifier_commitment FROM nullifier WHERE idx = ?1;")
         .bind(n)
         .fetch_one(pool)
         .await;
@@ -203,42 +220,51 @@ pub async fn has_void_number(pool: &SqlitePool, vn_index: u64) -> bool {
     }
 }
 
-pub async fn get_one_void_number(pool: &SqlitePool, vn_index: u64) -> Result<VoidNumber> {
-    let n = vn_index as i64;
-    let one_row = sqlx::query("SELECT vn FROM void_number WHERE idx = ?1;")
+pub async fn get_one_nullifier(
+    pool: &SqlitePool,
+    nullifier_index: u64,
+) -> Result<(NullifierCommitment, OutgoingNote)> {
+    let n = nullifier_index as i64;
+    let one_row = sqlx::query("SELECT * FROM nullifier WHERE idx = ?1;")
         .bind(n)
         .fetch_one(pool)
         .await?;
-    let one: VoidNumber = one_row
-        .get::<Vec<u8>, _>("vn")
+    let nc: NullifierCommitment = one_row
+        .get::<Vec<u8>, _>("nullifier_commitment")
         .try_into()
         .map_err(|_| crate::errors::IndexerError::DecodedError)?;
 
-    Ok(one)
+    let mut _on = one_row.get::<&[u8], _>("outgoing_note");
+    let on = <OutgoingNote as Decode>::decode(&mut _on)?;
+
+    Ok((nc, on))
 }
 
-pub async fn get_batched_void_number(
+pub async fn get_batched_nullifier(
     pool: &SqlitePool,
-    from_vn_index: u64,
-    to_vn_index: u64,
+    from_nullifier_index: u64,
+    to_nullifier_index: u64,
 ) -> Result<SenderChunk> {
-    let from = from_vn_index as i64;
-    let to = to_vn_index as i64;
-    let batched_vns = sqlx::query("SELECT vn FROM void_number WHERE idx BETWEEN ?1 and ?2;")
+    let from = from_nullifier_index as i64;
+    let to = to_nullifier_index as i64;
+    let batched_nullifiers = sqlx::query("SELECT * FROM nullifier WHERE idx BETWEEN ?1 and ?2;")
         .bind(from)
         .bind(to)
         .fetch_all(pool)
         .await?;
-    let mut vns = Vec::with_capacity(batched_vns.len());
-    for i in &batched_vns {
-        let vn: VoidNumber = i
-            .get::<Vec<u8>, _>("vn")
+    let mut nullifiers = Vec::with_capacity(batched_nullifiers.len());
+    for i in &batched_nullifiers {
+        let nc: NullifierCommitment = i
+            .get::<Vec<u8>, _>("nullifier_commitment")
             .try_into()
             .map_err(|_| crate::errors::IndexerError::DecodedError)?;
-        vns.push(vn)
+
+        let mut _on = i.get::<&[u8], _>("outgoing_note");
+        let on = <OutgoingNote as Decode>::decode(&mut _on)?;
+        nullifiers.push((nc, on))
     }
 
-    Ok(vns)
+    Ok(nullifiers)
 }
 
 pub async fn update_or_insert_total_senders_receivers(
@@ -311,7 +337,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     let pool = initialize_db_pool(&db_path, pool_size).await?;
 
     // if the db is empty, pull utxos.
-    if let Err(_) | Ok(0) = get_len_of_void_number(&pool).await {
+    if let Err(_) | Ok(0) = get_len_of_nullifier(&pool).await {
         crate::indexer::sync::pull_all_shards_to_db(&pool, node).await?;
     }
 

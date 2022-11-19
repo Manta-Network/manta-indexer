@@ -16,15 +16,19 @@
 
 ///! Sync shards from full node.
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
-use crate::types::{EncryptedNote, PullResponse, Utxo};
+use crate::types::{FullIncomingNote, PullResponse, Utxo};
 use anyhow::Result;
-use codec::Encode;
+use codec::{Decode, Encode};
 use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
-use manta_pay::config::utxo::v2::{Checkpoint, MerkleTreeConfiguration};
+use manta_pay::{
+    config::utxo::v2::{Checkpoint, MerkleTreeConfiguration, UtxoAccumulatorItemHash},
+    manta_parameters::{self, Get},
+    manta_util::codec::Decode as _,
+};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -50,17 +54,21 @@ pub async fn synchronize_ledger(
 
 pub async fn reconstruct_shards_from_pull_response(
     pull_response: &PullResponse,
-) -> Result<HashMap<u8, Vec<(Utxo, EncryptedNote)>>> {
+) -> Result<HashMap<u8, Vec<(Utxo, FullIncomingNote)>>> {
     let mut shards =
-        HashMap::<u8, Vec<(Utxo, EncryptedNote)>>::with_capacity(pull_response.senders.len());
+        HashMap::<u8, Vec<(Utxo, FullIncomingNote)>>::with_capacity(pull_response.senders.len());
     let mut stream_receivers = tokio_stream::iter(pull_response.receivers.iter());
+    let utxo_accumulator_item_hash = UtxoAccumulatorItemHash::decode(
+        manta_parameters::pay::testnet::parameters::UtxoAccumulatorItemHash::get()
+            .expect("Checksum did not match."),
+    )
+    .expect("Unable to decode the Merkle Tree Item Hash.");
     while let Some(receiver) = stream_receivers.next().await {
         let shard_index = MerkleTreeConfiguration::tree_index(
             &receiver
                 .0
-                .to_vec()
-                .try_into()
-                .map_err(|_| crate::errors::IndexerError::WrongMerkleTreeIndex)?,
+                .into()
+                .item_hash(&utxo_accumulator_item_hash, &mut ()),
         );
         shards
             .entry(shard_index)
@@ -115,13 +123,13 @@ pub async fn sync_shards_from_full_node(
             }
         }
 
-        // update void number
-        let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
-        let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
-        while let Some((idx, vn)) = stream_vns.next().await {
-            let vn: Vec<u8> = (*vn).into();
-            let i = idx + vn_checkpoint;
-            crate::db::insert_one_void_number(pool, i as u64, vn).await?;
+        // update nullifier
+        let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
+        let nullifier_checkpoint = crate::db::get_len_of_nullifier(pool).await?;
+        while let Some((idx, nullifier)) = stream_nullifiers.next().await {
+            // let nullifier: Vec<u8> = (*_nullifier).into();
+            let i = idx + nullifier_checkpoint;
+            crate::db::insert_one_nullifier(pool, i as u64, &nullifier.0, &nullifier.1).await?;
         }
 
         // update total senders and receivers
@@ -252,10 +260,9 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         }
 
         // update sender void number into sqlite.
-        let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
-        while let Some((_, vn)) = stream_vns.next().await {
-            let vn: Vec<u8> = (*vn).into();
-            crate::db::append_void_number(pool, vn).await?;
+        let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
+        while let Some((_, nullifier)) = stream_nullifiers.next().await {
+            crate::db::append_nullifier(pool, &nullifier.0, &nullifier.1).await?;
         }
 
         // update total senders and receivers
@@ -289,7 +296,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
 fn increasing_checkpoint(
     checkpoint: &mut Checkpoint,
     incremental_sender: usize,
-    incremental_receiver: &HashMap<u8, Vec<(Utxo, EncryptedNote)>>,
+    incremental_receiver: &HashMap<u8, Vec<(Utxo, FullIncomingNote)>>,
 ) {
     checkpoint.sender_index += incremental_sender;
     incremental_receiver.iter().for_each(|(idx, utxos)| {

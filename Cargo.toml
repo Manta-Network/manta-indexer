@@ -28,7 +28,7 @@ log4rs = "1.2"
 manta-crypto = { git = "https://github.com/manta-network/manta-rs.git", branch = "feat/new-circuits" }
 manta-pay = { git = "https://github.com/manta-network/manta-rs.git", branch = "feat/new-circuits", features = ["groth16", "scale", "serde"] }
 manta-util = { git = "https://github.com/manta-network/manta-rs.git", branch = "feat/new-circuits" }
-pallet-manta-pay = { git = "https://github.com/manta-network/Manta.git", branch = "feat/manta-pay-v1" }
+pallet-manta-pay = { git = "https://github.com/manta-network/Manta.git", branch = "ghzlatarev/dolphin-v3-2", features = ["rpc", "runtime"] }
 
 # general crates
 chrono = "0.4.23"
