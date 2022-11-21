@@ -54,6 +54,7 @@ criterion = "0.4.0"
 manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git" }
 rand = "0.8.5"
 tempfile = "3.3.0"
+base64 = "0.13"
 
 [[bench]]
 name = "db_bench"
