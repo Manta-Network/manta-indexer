@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::PullResponse;
+use crate::types::{DensePullResponse, PullResponse};
 use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
@@ -37,6 +37,16 @@ pub trait MantaPayIndexerApi {
         max_receivers: u64,
         max_senders: u64,
     ) -> RpcResult<PullResponse>;
+
+    /// Same semantic of `pull_ledger_diff`, but return a dense response,
+    /// which is more friendly for transmission performance.
+    #[method(name = "densely_pull_ledger_diff")]
+    async fn densely_pull_ledger_diff(
+        &self,
+        checkpoint: Checkpoint,
+        max_receivers: u64,
+        max_senders: u64,
+    ) -> RpcResult<DensePullResponse>;
 }
 
 pub struct MantaPayIndexerServer {
@@ -67,6 +77,18 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
                 .map_err(|e| JsonRpseeError::Custom(e.to_string()))?;
 
         Ok(response)
+    }
+
+    async fn densely_pull_ledger_diff(
+        &self,
+        checkpoint: Checkpoint,
+        max_receivers: u64,
+        max_senders: u64,
+    ) -> RpcResult<DensePullResponse> {
+        let raw = self
+            .pull_ledger_diff(checkpoint, max_receivers, max_senders)
+            .await?;
+        Ok(raw.into())
     }
 }
 

@@ -139,3 +139,58 @@ pub struct Shard {
     // utxo: (Utxo, EncryptedNote),
     pub utxo: Vec<u8>,
 }
+
+/// `DensePullResponse` is the dense design of raw `PullResponse`.
+/// The reason for creating it is that raw `PullResponse` always carries a bunch of sender
+/// and receiver chunks, which is quite not friendly for json serde and de-serde.
+/// So with raw format, serialization will generates a large bottleneck.
+/// So we will use `DensePullResponse` as transmission protocol.
+///
+/// Note:
+/// Most of the time(90%+) is spent writing into json strings,
+/// so the key design here is to improve the compression ratio of the chunks string ASAP.
+/// If you want to improve, you can try more effective compression algorithm like `zstd`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DensePullResponse {
+    /// Same with raw `PullResponse`
+    pub sender_receivers_total: u128,
+    /// Total amount of dense `ReceiverChunk`
+    pub receiver_len: usize,
+    /// Compression of dense `ReceiverChunk`
+    pub receivers: String,
+    /// Total amount of dense `SenderChunk`
+    pub sender_len: usize,
+    /// Compression of dense `SenderChunk`
+    pub senders: String,
+    /// Same with raw `PullResponse`
+    pub should_continue: bool,
+}
+
+impl From<PullResponse> for DensePullResponse {
+    fn from(raw: PullResponse) -> Self {
+        let receiver_bytes_len =
+            raw.receivers.len() * (mem::size_of::<Utxo>() + mem::size_of::<EncryptedNote>());
+        let sender_bytes_len = raw.senders.len() * mem::size_of::<VoidNumber>();
+        let mut receivers_bytes = Vec::with_capacity(receiver_bytes_len);
+        let mut sender_bytes = Vec::with_capacity(sender_bytes_len);
+
+        raw.receivers.iter().for_each(|item| {
+            // TODO use more high level api like parity::codec::Encode, but need to make sure the compress behavior is same.
+            receivers_bytes.extend_from_slice(item.0.as_slice());
+            receivers_bytes.extend_from_slice(item.1.ephemeral_public_key.as_slice());
+            receivers_bytes.extend_from_slice(item.1.ciphertext.as_slice());
+        });
+        raw.senders.iter().for_each(|item| {
+            sender_bytes.extend_from_slice(item.as_slice());
+        });
+
+        Self {
+            sender_receivers_total: raw.senders_receivers_total,
+            receiver_len: raw.receivers.len(),
+            receivers: base64::encode(receivers_bytes),
+            sender_len: raw.senders.len(),
+            senders: base64::encode(sender_bytes),
+            should_continue: raw.should_continue,
+        }
+    }
+}

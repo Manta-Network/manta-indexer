@@ -549,7 +549,6 @@ mod tests {
         assert!(true);
     }
 
-
     #[derive(serde::Serialize)]
     struct NewPRV1 {
         rlen: usize,
@@ -574,15 +573,17 @@ mod tests {
             senders: vec![],
             senders_receivers_total: 0,
         };
-        let default_en = EncryptedNote { ephemeral_public_key: Default::default(), ciphertext: [0u8; 68] };
+        let default_en = EncryptedNote {
+            ephemeral_public_key: Default::default(),
+            ciphertext: [0u8; 68],
+        };
         for _ in 0..1024 * 8 {
             x.receivers.push((Default::default(), default_en.clone()));
             x.senders.push(Default::default());
         }
         let timer = std::time::Instant::now();
-        let d = serde_json::to_string(&x)?;
+        let _d = serde_json::to_string(&x)?;
         println!("old time = {} ms", timer.elapsed().as_millis());
-
 
         let mut y = NewPRV1 {
             rlen: 0,
@@ -597,7 +598,7 @@ mod tests {
             y.s.extend_from_slice(&[0u8; 32]);
         }
         let timer = std::time::Instant::now();
-        let d = serde_json::to_string(&y)?;
+        let _d = serde_json::to_string(&y)?;
         println!("new v1 time = {} ms", timer.elapsed().as_millis());
 
         let mut y = NewPRV2 {
@@ -617,7 +618,7 @@ mod tests {
         y.r = base64::encode(r.as_slice());
         y.s = base64::encode(s.as_slice());
         let timer = std::time::Instant::now();
-        let d = serde_json::to_string(&y)?;
+        let _d = serde_json::to_string(&y)?;
         println!("new v2 time = {} ms", timer.elapsed().as_millis());
 
         Ok(())

@@ -19,3 +19,5 @@ logs
 # nodejs toxic
 **/package-lock.json
 **/yarn-*.log
+
+.DS_Store
