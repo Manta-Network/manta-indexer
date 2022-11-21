@@ -18,7 +18,6 @@
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
 use crate::types::{FullIncomingNote, PullResponse, Utxo};
 use anyhow::Result;
-use codec::{Decode, Encode};
 use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -56,7 +55,7 @@ pub async fn reconstruct_shards_from_pull_response(
     pull_response: &PullResponse,
 ) -> Result<HashMap<u8, Vec<(Utxo, FullIncomingNote)>>> {
     let mut shards =
-        HashMap::<u8, Vec<(Utxo, FullIncomingNote)>>::with_capacity(pull_response.senders.len());
+        HashMap::<u8, Vec<(Utxo, FullIncomingNote)>>::with_capacity(pull_response.receivers.len());
     let mut stream_receivers = tokio_stream::iter(pull_response.receivers.iter());
     let utxo_accumulator_item_hash = UtxoAccumulatorItemHash::decode(
         manta_parameters::pay::testnet::parameters::UtxoAccumulatorItemHash::get()
@@ -67,7 +66,8 @@ pub async fn reconstruct_shards_from_pull_response(
         let shard_index = MerkleTreeConfiguration::tree_index(
             &receiver
                 .0
-                .into()
+                .try_into()
+                .map_err(|_| crate::errors::IndexerError::BadUtxo)?
                 .item_hash(&utxo_accumulator_item_hash, &mut ()),
         );
         shards
@@ -108,15 +108,16 @@ pub async fn sync_shards_from_full_node(
         // update shards
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
-            for (next_index, sh) in shard.iter().enumerate() {
+            for (utxo_index, sh) in shard.iter().enumerate() {
                 let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
-                if !crate::db::has_shard(pool, *shard_index, next_index as u64 + offset).await {
-                    let encoded_utxo = sh.encode();
+                if !crate::db::has_shard(pool, *shard_index, utxo_index as u64 + offset).await {
+                    let (utxo, note) = &sh;
                     crate::db::insert_one_shard(
                         pool,
                         *shard_index,
-                        next_index as u64 + offset,
-                        encoded_utxo,
+                        utxo_index as u64 + offset,
+                        utxo,
+                        note,
                     )
                     .await?;
                 }
@@ -246,14 +247,15 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
             for (offset, content) in shard.iter().enumerate() {
-                let encoded_utxo: Vec<u8> = content.encode();
-                let next_index_beginning_offset =
+                let (utxo, note) = &content;
+                let utxo_index_beginning_offset =
                     current_checkpoint.receiver_index[*shard_index as usize];
                 crate::db::insert_one_shard(
                     pool,
                     *shard_index,
-                    (next_index_beginning_offset + offset) as u64,
-                    encoded_utxo,
+                    (utxo_index_beginning_offset + offset) as u64,
+                    utxo,
+                    note,
                 )
                 .await?;
             }
@@ -392,7 +394,7 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
 mod tests {
     use super::*;
     use crate::{db, types::*};
-    use codec::Decode;
+    use codec::{Decode, Encode};
     use manta_xt::dolphin_runtime::runtime_types::pallet_manta_pay::types::TransferPost;
     use manta_xt::{dolphin_runtime, utils, MantaConfig};
     use rand::distributions::{Distribution, Uniform};
@@ -624,7 +626,6 @@ mod tests {
 
     #[tokio::test]
     async fn reconstruct_shards_should_be_correct() {
-        // let url = "wss://ws.rococo.dolphin.engineering:443";
         let config = crate::utils::read_config().unwrap();
         let node = config["indexer"]["configuration"]["full_node"]
             .as_str()
@@ -647,23 +648,19 @@ mod tests {
         // check shards randomly for 5 times
         for _ in 0..5 {
             let shard_index_between = Uniform::from(0..=20); // [0, 256)
-            let next_index_between = Uniform::from(0..100);
+            let utxo_index_between = Uniform::from(0..100);
             let mut rng = rand::thread_rng();
             let shard_index = shard_index_between.sample(&mut rng);
-            let next_index = next_index_between.sample(&mut rng);
+            let utxo_index = utxo_index_between.sample(&mut rng);
             let _shard = dolphin_runtime::storage()
                 .manta_pay()
-                .shards(shard_index as u8, next_index as u64);
+                .shards(shard_index as u8, utxo_index as u64);
             let onchain_utxo = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
             let reconstructed_utxo =
-                &shards.get(&shard_index).as_ref().unwrap()[next_index as usize];
+                &shards.get(&shard_index).as_ref().unwrap()[utxo_index as usize];
 
-            assert_eq!(onchain_utxo.0, reconstructed_utxo.0);
-            assert_eq!(
-                onchain_utxo.1.ephemeral_public_key,
-                reconstructed_utxo.1.ephemeral_public_key
-            );
-            assert_eq!(onchain_utxo.1.ciphertext, reconstructed_utxo.1.ciphertext);
+            assert_eq!(onchain_utxo.0.to_vec(), reconstructed_utxo.0.encode());
+            assert_eq!(onchain_utxo.1.encode(), reconstructed_utxo.1.encode());
         }
     }
 }

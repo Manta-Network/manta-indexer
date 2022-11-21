@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{NullifierCommitment, OutgoingNote, SenderChunk, Shard};
+use crate::types::{FullIncomingNote, NullifierCommitment, OutgoingNote, SenderChunk, Shard, Utxo};
 use anyhow::Result;
 use codec::{Decode, Encode};
 use manta_pay::config::utxo::v2::Checkpoint;
@@ -60,15 +60,14 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
 }
 
 /// Whether the shard exists in the db or not.
-pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> bool {
-    let n = next_index as i64;
+pub async fn has_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
+    let n = utxo_index as i64;
 
-    let one: Result<Shard, _> =
-        sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and next_index = ?2;")
-            .bind(shard_index)
-            .bind(n)
-            .fetch_one(pool)
-            .await;
+    let one = sqlx::query("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
+        .bind(shard_index)
+        .bind(n)
+        .fetch_one(pool)
+        .await;
 
     match one {
         Ok(_) => true,
@@ -78,10 +77,10 @@ pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> b
 }
 
 /// Get a single shard from db.
-pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> Result<Shard> {
-    let n = next_index as i64;
+pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> Result<Shard> {
+    let n = utxo_index as i64;
 
-    let one = sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+    let one = sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
         .bind(shard_index)
         .bind(n)
         .fetch_one(pool)
@@ -91,18 +90,18 @@ pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) 
 }
 
 /// Get a batched shard from db.
-/// [from_next_index, to_next_index], including the start and the end.
+/// [from_utxo_index, to_utxo_index], including the start and the end.
 pub async fn get_batched_shards(
     pool: &SqlitePool,
     shard_index: u8,
-    from_next_index: u64,
-    to_next_index: u64,
+    from_utxo_index: u64,
+    to_utxo_index: u64,
 ) -> Result<Vec<Shard>> {
-    let from = from_next_index as i64;
-    let to = to_next_index as i64;
+    let from = from_utxo_index as i64;
+    let to = to_utxo_index as i64;
 
     let batched_shard = sqlx::query_as(
-        "SELECT * FROM shards WHERE shard_index = ?1 and next_index BETWEEN ?2 and ?3;",
+        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index BETWEEN ?2 and ?3;",
     )
     .bind(shard_index)
     .bind(from)
@@ -116,18 +115,20 @@ pub async fn get_batched_shards(
 pub async fn insert_one_shard(
     pool: &SqlitePool,
     shard_index: u8,
-    next_index: u64,
-    encoded_utxo: Vec<u8>,
+    utxo_index: u64,
+    utxo: &Utxo,
+    note: &FullIncomingNote,
 ) -> Result<()> {
-    let n = next_index as i64;
+    let n = utxo_index as i64;
 
     let mut conn = pool.acquire().await?;
     let mut tx = conn.begin().await?;
     let _row_at =
-        sqlx::query("INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3);")
+        sqlx::query("INSERT INTO shards (shard_index, utxo_index, utxo, full_incoming_note) VALUES (?1, ?2, ?3, ?4);")
             .bind(shard_index)
             .bind(n)
-            .bind(encoded_utxo)
+            .bind(utxo.encode())
+            .bind(note.encode())
             .execute(&mut tx)
             .await?;
 
@@ -247,11 +248,13 @@ pub async fn get_batched_nullifier(
 ) -> Result<SenderChunk> {
     let from = from_nullifier_index as i64;
     let to = to_nullifier_index as i64;
-    let batched_nullifiers = sqlx::query("SELECT * FROM nullifier WHERE idx BETWEEN ?1 and ?2;")
-        .bind(from)
-        .bind(to)
-        .fetch_all(pool)
-        .await?;
+    let batched_nullifiers = sqlx::query(
+        "SELECT nullifier_commitment, outgoing_note FROM nullifier WHERE idx BETWEEN ?1 and ?2;",
+    )
+    .bind(from)
+    .bind(to)
+    .fetch_all(pool)
+    .await?;
     let mut nullifiers = Vec::with_capacity(batched_nullifiers.len());
     for i in &batched_nullifiers {
         let nc: NullifierCommitment = i
@@ -347,7 +350,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Shard;
+    use crate::types::{FullIncomingNote, Shard, UtxoTransparency};
     use rand::distributions::{Distribution, Uniform};
 
     #[tokio::test]
@@ -364,11 +367,11 @@ mod tests {
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let next_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..300);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
-        let next_index = next_index_between.sample(&mut rng);
-        let one_shard = get_one_shard(&pool, shard_index, next_index).await;
+        let utxo_index = utxo_index_between.sample(&mut rng);
+        let one_shard = get_one_shard(&pool, shard_index, utxo_index).await;
 
         assert!(one_shard.is_ok());
         assert_eq!(one_shard.as_ref().unwrap().shard_index, shard_index);
@@ -382,16 +385,16 @@ mod tests {
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let next_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..300);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
-        let next_index = next_index_between.sample(&mut rng);
-        assert!(has_shard(&pool, shard_index, next_index).await);
+        let utxo_index = utxo_index_between.sample(&mut rng);
+        assert!(has_shard(&pool, shard_index, utxo_index).await);
 
-        let invalid_next_index = u64::MAX;
+        let invalid_utxo_index = u64::MAX;
 
         // This shard should not exist.
-        assert!(!has_shard(&pool, shard_index, invalid_next_index).await);
+        assert!(!has_shard(&pool, shard_index, invalid_utxo_index).await);
     }
 
     #[tokio::test]
@@ -402,26 +405,26 @@ mod tests {
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let next_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..300);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
-        let mut from_next_index = next_index_between.sample(&mut rng);
-        let mut to_next_index = next_index_between.sample(&mut rng);
+        let mut from_utxo_index = utxo_index_between.sample(&mut rng);
+        let mut to_utxo_index = utxo_index_between.sample(&mut rng);
 
-        if to_next_index < from_next_index {
-            std::mem::swap(&mut to_next_index, &mut from_next_index);
+        if to_utxo_index < from_utxo_index {
+            std::mem::swap(&mut to_utxo_index, &mut from_utxo_index);
         }
-        assert!(to_next_index > from_next_index);
+        assert!(to_utxo_index > from_utxo_index);
 
         let batched_shards =
-            get_batched_shards(&pool, shard_index, from_next_index, to_next_index).await;
+            get_batched_shards(&pool, shard_index, from_utxo_index, to_utxo_index).await;
 
         assert!(batched_shards.is_ok());
 
         let batched_shards = batched_shards.unwrap();
         assert_eq!(
             batched_shards.len(),
-            (to_next_index - from_next_index + 1) as usize
+            (to_utxo_index - from_utxo_index + 1) as usize
         );
     }
 
@@ -439,23 +442,31 @@ mod tests {
 
         let mut pool = pool.unwrap();
 
-        let utxo = vec![100u8; 132];
+        let utxo = Utxo {
+            transparency: UtxoTransparency::Opaque,
+            ..Default::default()
+        };
+        let note = FullIncomingNote {
+            address_partition: 1,
+            ..Default::default()
+        };
         let shard_index = 0u8;
-        let next_index = 0u64;
+        let utxo_index = 0u64;
         assert!(
-            insert_one_shard(&pool, shard_index, next_index, utxo.clone())
+            insert_one_shard(&pool, shard_index, utxo_index, &utxo, &note)
                 .await
                 .is_ok()
         );
 
-        let shard = get_one_shard(&pool, shard_index, next_index).await;
+        let shard = get_one_shard(&pool, shard_index, utxo_index).await;
         assert!(shard.is_ok());
         let shard = shard.unwrap();
 
         let orignal_shard = Shard {
             shard_index,
-            next_index: next_index as i64,
-            utxo: utxo,
+            utxo_index: utxo_index as i64,
+            utxo: utxo.encode(),
+            full_incoming_note: note.encode(),
         };
 
         assert!(clean_up(&mut pool, "shards").await.is_ok());
@@ -498,30 +509,37 @@ mod tests {
         let pool = pool.unwrap();
 
         let i = 1;
-        let vn = [1u8; 32];
-        assert!(insert_one_void_number(&pool, i, vn.clone().into())
-            .await
-            .is_ok());
+        let nc = [1u8; 32];
+        let on = OutgoingNote::default();
+        assert!(insert_one_nullifier(&pool, i, &nc, &on).await.is_ok());
 
-        // query void number
-        let _vn = get_one_void_number(&pool, i).await;
-        assert_eq!(_vn.unwrap(), vn);
+        // query one void number
+        let _nc = get_one_nullifier(&pool, i).await;
+        assert_eq!(_nc.unwrap(), (nc, on));
 
         let (start, end) = (1u64, 5u64);
         for i in start..=end {
-            let vn = [i as u8; 32];
-            assert!(insert_one_void_number(&pool, i, vn.clone().into())
+            let new_nc = [i as u8; 32];
+            let new_on = OutgoingNote {
+                ephemeral_public_key: [i as u8; 32],
+                ..Default::default()
+            };
+            assert!(insert_one_nullifier(&pool, i, &new_nc, &new_on)
                 .await
                 .is_ok());
         }
 
-        let batch_vn = get_batched_void_number(&pool, start, end).await;
-        assert!(batch_vn.is_ok());
-        let batch_vn = batch_vn.unwrap();
+        let batch_nc = get_batched_nullifier(&pool, start, end).await;
+        assert!(batch_nc.is_ok());
+        let batch_nc = batch_nc.unwrap();
 
-        for (i, _vn) in (start..=end).zip(batch_vn) {
-            let vn = [i as u8; 32];
-            assert_eq!(_vn, vn);
+        for (i, _nc) in (start..=end).zip(batch_nc) {
+            let new_nc = [i as u8; 32];
+            let new_on = OutgoingNote {
+                ephemeral_public_key: [i as u8; 32],
+                ..Default::default()
+            };
+            assert_eq!(_nc, (new_nc, new_on));
         }
     }
 

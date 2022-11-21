@@ -14,13 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::mem;
 
 pub use pallet_manta_pay::types::{
     FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk, SenderChunk,
-    Utxo,
+    Utxo, UtxoTransparency,
 };
 
 pub const CIPHER_TEXT_LENGTH: usize = 68;
@@ -92,6 +91,13 @@ pub struct Health {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Shard {
     pub shard_index: u8,
-    pub next_index: i64,
+    pub utxo_index: i64, // sqlite doesn't support u64
     pub utxo: Vec<u8>,
+    pub full_incoming_note: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Nullifier {
+    pub nullifier_commitment: Vec<u8>,
+    pub outgoing_note: Vec<u8>,
 }

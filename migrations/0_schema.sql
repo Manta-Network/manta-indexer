@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS "shards"
 CREATE INDEX IF NOT EXISTS "shard_index" ON "shards" 
 (
     shard_index ASC,
-    next_index
+    utxo_index
 );
 
 -- create nullifier table
