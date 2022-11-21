@@ -577,7 +577,9 @@ mod tests {
             ephemeral_public_key: Default::default(),
             ciphertext: [0u8; 68],
         };
-        for _ in 0..1024 * 8 {
+
+        let size = 8;
+        for _ in 0..size {
             x.receivers.push((Default::default(), default_en.clone()));
             x.senders.push(Default::default());
         }
@@ -591,7 +593,7 @@ mod tests {
             slen: 0,
             s: Vec::new(),
         };
-        for _ in 0..1024 * 8 {
+        for _ in 0..size {
             y.rlen += 1;
             y.r.extend_from_slice(&[0u8; 132]);
             y.slen += 1;
@@ -609,17 +611,17 @@ mod tests {
         };
         let mut r = Vec::new();
         let mut s = Vec::new();
-        for _ in 0..1024 * 8 {
+        for _ in 0..size {
             y.rlen += 1;
-            r.extend_from_slice(&[0u8; 132]);
+            r.extend_from_slice(&[1u8; 132]);
             y.slen += 1;
-            s.extend_from_slice(&[0u8; 32]);
+            s.extend_from_slice(&[1u8; 32]);
         }
         y.r = base64::encode(r.as_slice());
         y.s = base64::encode(s.as_slice());
         let timer = std::time::Instant::now();
         let _d = serde_json::to_string(&y)?;
-        println!("new v2 time = {} ms", timer.elapsed().as_millis());
+        println!("new v2 time = {} ms, d = {:?}", timer.elapsed().as_millis(), _d);
 
         Ok(())
     }
