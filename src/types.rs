@@ -84,8 +84,8 @@ pub fn upper_bound_for_response(payload_size: usize) -> (usize, usize) {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RpcMethods {
-    version: u32,
-    methods: Vec<String>,
+    pub version: u32,
+    pub methods: Vec<String>,
 }
 
 /// Health struct returned by the RPC

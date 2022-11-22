@@ -23,6 +23,7 @@ use crate::relayer::{
     WsServerConfig,
 };
 use anyhow::{bail, Result};
+use frame_support::log::info;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
@@ -76,6 +77,7 @@ pub async fn start_service() -> Result<WsServerHandle> {
 
     let mut available_methods = module.method_names().collect::<Vec<_>>();
     available_methods.sort_unstable();
+    info!(target: "indexer", "all methods: {:?}", available_methods);
     module
         .register_method("indexer_rpc_methods", move |_, _| {
             Ok(serde_json::json!({

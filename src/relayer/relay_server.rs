@@ -457,11 +457,16 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
     }
 
     async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
-        let methods = self
+        let mut methods = self
             .dmc
             .request::<RpcMethods>("rpc_methods", rpc_params![])
             .await?;
-
+        // Tricky: to let polkadot-js found api only defined in indexer
+        // see: https://polkadot.js.org/docs/api/start/rpc.custom#custom-definitions
+        // "Even if you define the method it will only appear on the API if it appears in the list returned by api.rpc.rpc.methods()"
+        methods
+            .methods
+            .push("mantaPay_densely_pull_ledger_diff".to_string());
         Ok(methods)
     }
 

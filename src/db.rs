@@ -322,6 +322,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 mod tests {
     use super::*;
     use crate::types::{EncryptedNote, PullResponse, Shard};
+    use codec::Encode;
     use rand::distributions::{Distribution, Uniform};
 
     #[tokio::test]
@@ -549,19 +550,19 @@ mod tests {
         assert!(true);
     }
 
-    #[derive(serde::Serialize)]
+    #[derive(serde::Serialize, codec::Encode)]
     struct NewPRV1 {
-        rlen: usize,
+        rlen: u64,
         r: Vec<u8>,
-        slen: usize,
+        slen: u64,
         s: Vec<u8>,
     }
 
     #[derive(serde::Serialize)]
     struct NewPRV2 {
-        rlen: usize,
+        rlen: u64,
         r: String,
-        slen: usize,
+        slen: u64,
         s: String,
     }
 
@@ -578,7 +579,7 @@ mod tests {
             ciphertext: [0u8; 68],
         };
 
-        let size = 8;
+        let size = 1024 * 8;
         for _ in 0..size {
             x.receivers.push((Default::default(), default_en.clone()));
             x.senders.push(Default::default());
@@ -599,9 +600,16 @@ mod tests {
             y.slen += 1;
             y.s.extend_from_slice(&[0u8; 32]);
         }
-        let timer = std::time::Instant::now();
-        let _d = serde_json::to_string(&y)?;
-        println!("new v1 time = {} ms", timer.elapsed().as_millis());
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&y)?;
+            println!(
+                "new v1 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
 
         let mut y = NewPRV2 {
             rlen: 0,
@@ -619,10 +627,40 @@ mod tests {
         }
         y.r = base64::encode(r.as_slice());
         y.s = base64::encode(s.as_slice());
-        let timer = std::time::Instant::now();
-        let _d = serde_json::to_string(&y)?;
-        println!("new v2 time = {} ms, d = {:?}", timer.elapsed().as_millis(), _d);
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&y)?;
+            println!(
+                "new v2 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
 
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&x.encode())?;
+            println!(
+                "new v3 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
+
+        y.r = hex::encode(r.as_slice());
+        y.s = hex::encode(s.as_slice());
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&y)?;
+            println!(
+                "new v4 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
         Ok(())
     }
 }

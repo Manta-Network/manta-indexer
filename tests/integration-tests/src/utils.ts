@@ -44,9 +44,9 @@ export const manta_pay_types = {
     },
     DensePullResponse: {
         should_continue: 'bool',
-        receiver_len: 'number',
+        receiver_len: 'u64',
         receivers: 'String',
-        sender_len: 'number',
+        sender_len: 'u64',
         senders: 'String',
         senders_receivers_total: 'u128',
     }
