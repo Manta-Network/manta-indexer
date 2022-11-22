@@ -14,32 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::mem;
+
+pub use pallet_manta_pay::types::{
+    Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk,
+    SenderChunk, Utxo, UtxoTransparency,
+};
 
 pub const CIPHER_TEXT_LENGTH: usize = 68;
 pub const EPHEMERAL_PUBLIC_KEY_LENGTH: usize = 32;
 pub const UTXO_LENGTH: usize = 32;
 pub const VOID_NUMBER_LENGTH: usize = 32;
-
-/// Void Number Type
-pub type VoidNumber = [u8; VOID_NUMBER_LENGTH];
-
-/// UTXO Type
-pub type Utxo = [u8; UTXO_LENGTH];
-
-/// Group Type
-pub type Group = [u8; EPHEMERAL_PUBLIC_KEY_LENGTH];
-
-/// Ciphertext Type
-pub type Ciphertext = [u8; CIPHER_TEXT_LENGTH];
-
-/// Receiver Chunk Data Type
-pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>; // The size of each single element should be 132 bytes
-
-/// Sender Chunk Data Type
-pub type SenderChunk = Vec<VoidNumber>;
 
 pub const fn size_of_utxo() -> usize {
     UTXO_LENGTH
@@ -102,42 +88,18 @@ pub struct Health {
     pub should_have_peers: bool,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize, sqlx::Decode, sqlx::Encode)]
-pub struct EncryptedNote {
-    /// Ephemeral Public Key
-    pub ephemeral_public_key: Group,
-
-    /// Ciphertext
-    #[serde(
-        with = "manta_util::serde_with::As::<[manta_util::serde_with::Same; CIPHER_TEXT_LENGTH]>"
-    )]
-    pub ciphertext: Ciphertext,
-}
-
-#[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize)]
-pub struct PullResponse {
-    /// Pull Continuation Flag
-    ///
-    /// The `should_continue` flag is set to `true` if the client should request more data from the
-    /// ledger to finish the pull.
-    pub should_continue: bool,
-
-    /// Ledger Receiver Chunk
-    pub receivers: ReceiverChunk,
-
-    /// Ledger Sender Chunk
-    pub senders: SenderChunk,
-
-    /// Total Number of (Senders + Receivers) in Ledger
-    pub senders_receivers_total: u128,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Shard {
     pub shard_index: u8,
-    pub next_index: i64,
-    // utxo: (Utxo, EncryptedNote),
+    pub utxo_index: i64, // sqlite doesn't support u64
     pub utxo: Vec<u8>,
+    pub full_incoming_note: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Nullifier {
+    pub nullifier_commitment: Vec<u8>,
+    pub outgoing_note: Vec<u8>,
 }
 
 /// `DensePullResponse` is the dense design of raw `PullResponse`.

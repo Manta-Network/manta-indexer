@@ -14,12 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::types::{Checkpoint, PullResponse};
 use crate::types::{DensePullResponse, PullResponse};
 use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 
 pub mod pull;
