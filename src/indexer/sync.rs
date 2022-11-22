@@ -16,7 +16,7 @@
 
 ///! Sync shards from full node.
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
-use crate::types::{FullIncomingNote, PullResponse, Utxo};
+use crate::types::{Checkpoint, FullIncomingNote, PullResponse, Utxo};
 use anyhow::Result;
 use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
@@ -24,7 +24,7 @@ use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::{
-    config::utxo::v2::{Checkpoint, MerkleTreeConfiguration, UtxoAccumulatorItemHash},
+    config::utxo::v3::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
     manta_parameters::{self, Get},
     manta_util::codec::Decode as _,
 };

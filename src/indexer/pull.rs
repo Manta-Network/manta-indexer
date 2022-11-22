@@ -15,18 +15,17 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::constants::*;
-use crate::types::{FullIncomingNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
+use crate::types::{Checkpoint, FullIncomingNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
 use frame_support::log::{debug, trace};
-use manta_pay::config::utxo::v2::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 /// Calculate the next checkpoint.
 pub async fn calculate_next_checkpoint(
-    previous_shards: &HashMap<u8, Vec<(Utxo, FullIncomingNote)>>,
+    previous_shards: &HashMap<u8, ReceiverChunk>,
     previous_checkpoint: &Checkpoint,
     next_checkpoint: &mut Checkpoint,
     sender_index: usize,

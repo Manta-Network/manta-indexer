@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use std::mem;
 
 pub use pallet_manta_pay::types::{
-    FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk, SenderChunk,
-    Utxo, UtxoTransparency,
+    Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk,
+    SenderChunk, Utxo, UtxoTransparency,
 };
 
 pub const CIPHER_TEXT_LENGTH: usize = 68;

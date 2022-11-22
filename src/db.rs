@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{FullIncomingNote, NullifierCommitment, OutgoingNote, SenderChunk, Shard, Utxo};
+use crate::types::{
+    Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, SenderChunk, Shard, Utxo,
+};
 use anyhow::Result;
 use codec::{Decode, Encode};
-use manta_pay::config::utxo::v2::Checkpoint;
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqlitePool, SqlitePoolOptions},
