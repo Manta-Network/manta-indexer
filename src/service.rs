@@ -22,11 +22,14 @@ use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
     WsServerConfig,
 };
+use crate::types::RpcMethods;
+use crate::utils::OnceStatic;
 use anyhow::{bail, Result};
 use frame_support::log::info;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
+static RPC_METHODS: OnceStatic<RpcMethods> = OnceStatic::new("RPC_METHODS");
 
 pub async fn start_service() -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
@@ -75,15 +78,25 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let config = config["server"]["configuration"].to_string();
     let srv_config: WsServerConfig = toml::from_str(&config)?;
 
-    let mut available_methods = module.method_names().collect::<Vec<_>>();
+    let mut available_methods = module
+        .method_names()
+        .map(|s| s.to_owned())
+        .collect::<Vec<_>>();
     available_methods.sort_unstable();
     info!(target: "indexer", "all methods: {:?}", available_methods);
-    module
-        .register_method("indexer_rpc_methods", move |_, _| {
-            Ok(serde_json::json!({
-                "methods": available_methods,
-            }))
+    RPC_METHODS.init(move || {
+        Ok(RpcMethods {
+            version: 1,
+            methods: available_methods,
         })
+    })?;
+
+    // we may miss some methods, may add some methods that only exists in indexer.
+    // so we rewrite the `rpc_methods` instead of relay full node's, since those two response is not quite same.
+    // this way also allows polkadot-js found api only defined in indexer
+    // see: https://polkadot.js.org/docs/api/start/rpc.custom#custom-definitions
+    module
+        .register_method("rpc_methods", move |_, _| Ok(RPC_METHODS.clone()))
         .expect("infallible all other methods have their own address space; qed");
 
     let srv_addr = format!("127.0.0.1:{port}");

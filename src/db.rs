@@ -351,8 +351,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{FullIncomingNote, Shard, UtxoTransparency};
-    use crate::types::{EncryptedNote, PullResponse, Shard};
+    use crate::types::{FullIncomingNote, PullResponse, Shard, UtxoTransparency};
     use codec::Encode;
     use rand::distributions::{Distribution, Uniform};
 
@@ -620,14 +619,10 @@ mod tests {
             senders: vec![],
             senders_receivers_total: 0,
         };
-        let default_en = EncryptedNote {
-            ephemeral_public_key: Default::default(),
-            ciphertext: [0u8; 68],
-        };
 
         let size = 1024 * 8;
         for _ in 0..size {
-            x.receivers.push((Default::default(), default_en.clone()));
+            x.receivers.push((Default::default(), Default::default()));
             x.senders.push(Default::default());
         }
         let timer = std::time::Instant::now();
@@ -707,6 +702,7 @@ mod tests {
                 &_d[0..100]
             );
         }
+
         Ok(())
     }
 }

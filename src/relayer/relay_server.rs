@@ -15,7 +15,7 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::sub_client_pool::MtoMSubClientPool;
-use crate::types::{Health, RpcMethods};
+use crate::types::Health;
 use anyhow::Result;
 use jsonrpsee::{
     core::{async_trait, client::ClientT, RpcResult},
@@ -205,10 +205,6 @@ pub trait MantaRelayApi {
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L57
     #[method(name = "author_pendingExtrinsics")]
     async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>>;
-
-    // attached by framework.
-    #[method(name = "rpc_methods")]
-    async fn rpc_methods(&self) -> RpcResult<RpcMethods>;
 
     /// subscription fn declaration.
 
@@ -454,20 +450,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .dmc
             .request("author_pendingExtrinsics", rpc_params![])
             .await?)
-    }
-
-    async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
-        let mut methods = self
-            .dmc
-            .request::<RpcMethods>("rpc_methods", rpc_params![])
-            .await?;
-        // Tricky: to let polkadot-js found api only defined in indexer
-        // see: https://polkadot.js.org/docs/api/start/rpc.custom#custom-definitions
-        // "Even if you define the method it will only appear on the API if it appears in the list returned by api.rpc.rpc.methods()"
-        methods
-            .methods
-            .push("mantaPay_densely_pull_ledger_diff".to_string());
-        Ok(methods)
     }
 
     /// subscription methods.

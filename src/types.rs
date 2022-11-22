@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use codec::Encode;
 use serde::{Deserialize, Serialize};
 use std::mem;
 
@@ -22,31 +23,41 @@ pub use pallet_manta_pay::types::{
     SenderChunk, Utxo, UtxoTransparency,
 };
 
+/// Deprecated.
 pub const CIPHER_TEXT_LENGTH: usize = 68;
+/// Deprecated.
 pub const EPHEMERAL_PUBLIC_KEY_LENGTH: usize = 32;
+/// Deprecated.
 pub const UTXO_LENGTH: usize = 32;
+/// Deprecated.
 pub const VOID_NUMBER_LENGTH: usize = 32;
 
+/// Deprecated.
 pub const fn size_of_utxo() -> usize {
     UTXO_LENGTH
 }
 
+/// Deprecated.
 pub const fn size_of_encrypted_note() -> usize {
     EPHEMERAL_PUBLIC_KEY_LENGTH + CIPHER_TEXT_LENGTH
 }
 
+/// Deprecated.
 pub const fn size_of_void_number() -> usize {
     VOID_NUMBER_LENGTH
 }
 
+/// Deprecated.
 pub fn size_of_receiver_chunk(chunk: &ReceiverChunk) -> usize {
     chunk.len() * (size_of_encrypted_note() + size_of_encrypted_note())
 }
 
+/// Deprecated.
 pub fn size_of_sender_chunk(chunk: &SenderChunk) -> usize {
     chunk.len() * size_of_void_number()
 }
 
+/// Deprecated.
 pub fn size_of_pull_response(resp: &PullResponse) -> usize {
     let mut _size = 0;
     _size += mem::size_of_val(&resp.should_continue);
@@ -57,6 +68,7 @@ pub fn size_of_pull_response(resp: &PullResponse) -> usize {
     _size
 }
 
+/// Deprecated.
 pub fn upper_bound_for_response(payload_size: usize) -> (usize, usize) {
     let senders_share = size_of_void_number() as f32
         / (size_of_encrypted_note() + size_of_encrypted_note() + size_of_void_number()) as f32;
@@ -130,28 +142,12 @@ pub struct DensePullResponse {
 
 impl From<PullResponse> for DensePullResponse {
     fn from(raw: PullResponse) -> Self {
-        let receiver_bytes_len =
-            raw.receivers.len() * (mem::size_of::<Utxo>() + mem::size_of::<EncryptedNote>());
-        let sender_bytes_len = raw.senders.len() * mem::size_of::<VoidNumber>();
-        let mut receivers_bytes = Vec::with_capacity(receiver_bytes_len);
-        let mut sender_bytes = Vec::with_capacity(sender_bytes_len);
-
-        raw.receivers.iter().for_each(|item| {
-            // TODO use more high level api like parity::codec::Encode, but need to make sure the compress behavior is same.
-            receivers_bytes.extend_from_slice(item.0.as_slice());
-            receivers_bytes.extend_from_slice(item.1.ephemeral_public_key.as_slice());
-            receivers_bytes.extend_from_slice(item.1.ciphertext.as_slice());
-        });
-        raw.senders.iter().for_each(|item| {
-            sender_bytes.extend_from_slice(item.as_slice());
-        });
-
         Self {
             sender_receivers_total: raw.senders_receivers_total,
             receiver_len: raw.receivers.len(),
-            receivers: base64::encode(receivers_bytes),
+            receivers: hex::encode(raw.receivers.encode()),
             sender_len: raw.senders.len(),
-            senders: base64::encode(sender_bytes),
+            senders: hex::encode(raw.senders.encode()),
             should_continue: raw.should_continue,
         }
     }
