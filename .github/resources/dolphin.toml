@@ -1,0 +1,35 @@
+[settings]
+timeout = 300
+
+[relaychain]
+default_command = "{{PolkadotBinary}}"
+chain = "rococo-local"
+
+[[relaychain.nodes]]
+name = "alice"
+validator = true
+
+[[relaychain.nodes]]
+name = "bob"
+validator = true
+
+[[parachains]]
+id = 2084
+chain = "{{MantaPay_V1}}"
+cumulus_based = true
+add_to_genesis = true
+default_args = [
+    "--unsafe-ws-external",
+    "--unsafe-rpc-external",
+    "--rpc-cors=all",
+    "--rpc-methods=unsafe",
+    "--",
+    "--execution=wasm"
+]
+
+[parachains.collator]
+name = "dolphin"
+validator = true
+command = "{{MantaBinary}}"
+ws_port = 9800
+rcp_port = 9967
