@@ -17,10 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: borales/actions-yarn@v3.0.0
-      - uses: actions/checkout@v2
-        with:
-          repository: paritytech/polkadot-launch
-          path: polkadot-launch
+      - name: Get zombienet
+        run: |
+          curl -L -o ${{ github.workspace }}/.github/resources/zombienet-linux https://github.com/paritytech/zombienet/releases/download/v1.3.18/zombienet-linux
+          chmod +x ${{ github.workspace }}/.github/resources/zombienet-linux
       - name: Install pm2
         run: npm install -g pm2
       - name: Get polkadot
@@ -33,20 +33,12 @@ jobs:
           chmod +x ${{ github.workspace }}/.github/resources/manta
       - name: Start Relaychain Network with Dolphin
         run: |
-          cd ${{ github.workspace }}/polkadot-launch
           curl -L -o ${{ github.workspace }}/.github/resources/mantapay-v0.json https://manta-ops.s3.amazonaws.com/v3.4.3-bfa08d6/fork.json
-          cat ${{ github.workspace }}/.github/resources/dolphin.json | \
-            jq \
-              --arg relaychain_bin ${{ github.workspace }}/.github/resources/polkadot \
-              --arg parachains_bin ${{ github.workspace }}/.github/resources/manta \
-              --arg parachains_chain ${{ github.workspace }}/.github/resources/mantapay-v0.json \
-              '.relaychain.bin = $relaychain_bin
-              | .parachains[0].bin = $parachains_bin
-              | .parachains[0].chain = $parachains_chain
-              ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
-          yarn
-          yarn build
-          pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin-ci.json
+          export MantaPay_V1=${{ github.workspace }}/.github/resources/mantapay-v0.json
+          export PolkadotBinary=${{ github.workspace }}/.github/resources/polkadot
+          export MantaBinary=${{ github.workspace }}/.github/resources/manta
+          pm2 start --name ${{ github.workspace }}/.github/resources/zombienet-linux \
+            spawn --provider native ${{ github.workspace }}/.github/resources/dolphin.toml
       - name: Build and Start Indexer 
         run: |
           cd ${{ github.workspace }}
