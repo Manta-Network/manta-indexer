@@ -66,3 +66,9 @@ path = "src/main.rs"
 [[bin]]
 name = "load_ledger_locally"
 path = "bin/load_ledger_locally.rs"
+
+[profile.production]
+codegen-units = 1
+inherits = "release"
+lto = true
+strip = "symbols"
