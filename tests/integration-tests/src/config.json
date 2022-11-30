@@ -1,5 +1,5 @@
 {
-  "dolphinFullNodelocal": "wss://ws.rococo.dolphin.engineering:443",
-  "dolphinFullNode": "ws://127.0.0.1:9800",
+  "dolphinFullNode": "wss://ws.rococo.dolphin.engineering:443",
+  "dolphinFullNodeLocal": "ws://127.0.0.1:9800",
   "indexerAddress": "ws://127.0.0.1:7788"
 }
