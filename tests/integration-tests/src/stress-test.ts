@@ -18,7 +18,8 @@ describe("indexer stress test", function () {
         indexer_apis = [];
         // initial batch of apis as request simulation pool.
         for (let i = 0; i < max_concurrent; ++i) {
-            const indexer_api = await createPromiseApi(indexerAddress);
+            // const indexer_api = await createPromiseApi(indexerAddress);
+            const indexer_api = await createPromiseApi(dolphinFullNode);
             const health = await indexer_api.rpc.system.health();
             assert.isNotTrue(health.toJSON().isSyncing);
             indexer_apis.push(indexer_api);
@@ -26,8 +27,8 @@ describe("indexer stress test", function () {
     });
 
     it("stress test", async function () {
-        const total_receivers = 15000000;
-        const total_senders = 8000000;
+        const total_receivers = 40000;
+        const total_senders = 40000;
         const test_duration_sec = 60;
 
         let query_latency: number[] = [];
@@ -79,7 +80,7 @@ describe("indexer stress test", function () {
     })
 
 
-    it.only("dense stress test", async function () {
+    it("dense stress test", async function () {
         const total_receivers = 5000000;
         const total_senders = 5000000;
         const test_duration_sec = 60;
