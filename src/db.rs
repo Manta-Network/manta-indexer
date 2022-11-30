@@ -234,7 +234,9 @@ pub async fn get_one_nullifier(
     let nc: NullifierCommitment = one_row
         .get::<Vec<u8>, _>("nullifier_commitment")
         .try_into()
-        .map_err(|_| crate::errors::IndexerError::DecodedError)?;
+        .map_err(|_| {
+            crate::errors::IndexerError::DecodedError("NullifierCommitment".to_string())
+        })?;
 
     let mut _on = one_row.get::<&[u8], _>("outgoing_note");
     let on = <OutgoingNote as Decode>::decode(&mut _on)?;
@@ -242,18 +244,17 @@ pub async fn get_one_nullifier(
     Ok((nc, on))
 }
 
+/// Fetch a batch of nullifier data which index range is [beginning, ending) (without ending).
 pub async fn get_batched_nullifier(
     pool: &SqlitePool,
-    from_nullifier_index: u64,
-    to_nullifier_index: u64,
+    nullifier_beginning: u64,
+    nullifier_ending: u64,
 ) -> Result<SenderChunk> {
-    let from = from_nullifier_index as i64;
-    let to = to_nullifier_index as i64;
     let batched_nullifiers = sqlx::query(
-        "SELECT nullifier_commitment, outgoing_note FROM nullifier WHERE idx BETWEEN ?1 and ?2;",
+        "SELECT nullifier_commitment, outgoing_note FROM nullifier WHERE idx >= ?1 and idx < ?2;",
     )
-    .bind(from)
-    .bind(to)
+    .bind(nullifier_beginning as i64)
+    .bind(nullifier_ending as i64)
     .fetch_all(pool)
     .await?;
     let mut nullifiers = Vec::with_capacity(batched_nullifiers.len());
@@ -261,7 +262,9 @@ pub async fn get_batched_nullifier(
         let nc: NullifierCommitment = i
             .get::<Vec<u8>, _>("nullifier_commitment")
             .try_into()
-            .map_err(|_| crate::errors::IndexerError::DecodedError)?;
+            .map_err(|_| {
+                crate::errors::IndexerError::DecodedError("nullifier_commitment".to_string())
+            })?;
 
         let mut _on = i.get::<&[u8], _>("outgoing_note");
         let on = <OutgoingNote as Decode>::decode(&mut _on)?;

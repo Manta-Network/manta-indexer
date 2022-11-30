@@ -21,9 +21,6 @@ pub const MANTA_PAY_STORAGE_SHARDS_NAME: [u8; 6] = *b"Shards";
 /// The storage name: VoidNumberSetInsertionOrder
 pub const MANTA_PAY_STORAGE_VOID_NAME: [u8; 27] = *b"VoidNumberSetInsertionOrder";
 
-pub const PULL_MAX_SENDER_UPDATE_SIZE: u64 = 32768;
-pub const PULL_MAX_RECEIVER_UPDATE_SIZE: u64 = 32768;
-
 pub const VOID_NUMBER_TABLE_NAME: &str = "void_number";
 pub const SHARD_TABLE_NAME: &str = "shard";
 

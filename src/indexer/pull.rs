@@ -45,16 +45,11 @@ pub async fn calculate_next_checkpoint(
 pub async fn pull_receivers(
     pool: &SqlitePool,
     receiver_indices: [usize; 256],
-    max_update_request: u64,
+    max_update: u64,
 ) -> Result<(bool, ReceiverChunk)> {
     let mut more_receivers = false;
     let mut receivers = Vec::new();
     let mut receivers_pulled: u64 = 0;
-    let max_update = if max_update_request > PULL_MAX_RECEIVER_UPDATE_SIZE {
-        PULL_MAX_RECEIVER_UPDATE_SIZE
-    } else {
-        max_update_request
-    };
 
     for (shard_index, utxo_index) in receiver_indices.into_iter().enumerate() {
         debug!(
@@ -91,7 +86,8 @@ pub async fn pull_receivers_for_shard(
     receivers_pulled: &mut u64,
 ) -> Result<bool> {
     let max_receiver_index = (receiver_index as u64) + max_update;
-    debug!(
+    trace!(
+        target: "indexer",
         "query shard index: {}, and receiver_index: {}, {}",
         shard_index, receiver_index, max_receiver_index
     );
@@ -107,8 +103,11 @@ pub async fn pull_receivers_for_shard(
         }
         *receivers_pulled += 1;
         let mut utxo = shard.utxo.as_slice();
-        let n: (Utxo, FullIncomingNote) = <(Utxo, FullIncomingNote) as Decode>::decode(&mut utxo)?;
-        receivers.push(n);
+        let mut full_incoming_note = shard.full_incoming_note.as_slice();
+        receivers.push((
+            <Utxo as Decode>::decode(&mut utxo)?,
+            <FullIncomingNote as Decode>::decode(&mut full_incoming_note)?,
+        ));
 
         idx += 1;
     }
@@ -117,27 +116,17 @@ pub async fn pull_receivers_for_shard(
 
 pub async fn pull_senders(
     pool: &SqlitePool,
-    sender_index: usize,
-    max_update_request: u64,
+    sender_index: u64,
+    max_update: u64,
 ) -> Result<(bool, SenderChunk)> {
-    let max_sender_index = if max_update_request > PULL_MAX_SENDER_UPDATE_SIZE {
-        (sender_index as u64) + PULL_MAX_SENDER_UPDATE_SIZE
-    } else {
-        (sender_index as u64) + max_update_request
-    };
-
-    let senders = if crate::db::has_nullifier(pool, max_sender_index - 1).await {
-        crate::db::get_batched_nullifier(pool, sender_index as u64, max_sender_index - 1).await?
-    } else {
-        let length_of_vns = crate::db::get_len_of_nullifier(pool).await? as u64;
-        let senders =
-            crate::db::get_batched_nullifier(pool, sender_index as u64, length_of_vns - 1).await?;
-        return Ok((false, senders));
-    };
-
     Ok((
-        crate::db::has_nullifier(pool, max_sender_index as u64).await,
-        senders,
+        crate::db::has_nullifier(pool, sender_index as u64 + max_update).await,
+        crate::db::get_batched_nullifier(
+            pool,
+            sender_index as u64,
+            (sender_index + max_update) as u64,
+        )
+        .await?,
     ))
 }
 
@@ -152,7 +141,8 @@ pub async fn pull_ledger_diff(
 
     let (more_receivers, receivers) =
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
-    let (more_senders, senders) = pull_senders(pool, checkpoint.sender_index, max_senders).await?;
+    let (more_senders, senders) =
+        pull_senders(pool, checkpoint.sender_index as u64, max_senders).await?;
     let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await? as u128;
 
     Ok(PullResponse {

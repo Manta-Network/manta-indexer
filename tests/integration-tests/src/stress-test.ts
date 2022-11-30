@@ -8,8 +8,8 @@ import {performance} from "perf_hooks";
 describe("indexer stress test", function () {
     const max_concurrent = 3;
     const receiver_shard_num = 256;
-    const max_receiver_num = 1024 * 8;
-    const max_sender_num = 1024 * 8;
+    const max_receiver_num = 1024;
+    const max_sender_num = 1024;
 
     let indexer_apis: Array<ApiPromise>;
     let full_node_apis: Array<ApiPromise>;
@@ -79,9 +79,9 @@ describe("indexer stress test", function () {
     })
 
 
-    it("dense stress test", async function () {
-        const total_receivers = 15000000;
-        const total_senders = 8000000;
+    it.only("dense stress test", async function () {
+        const total_receivers = 5000000;
+        const total_senders = 5000000;
         const test_duration_sec = 60;
 
         let query_latency: number[] = [];

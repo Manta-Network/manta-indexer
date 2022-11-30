@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     log4rs::init_config(log4rs_config)?;
 
     // full node url to fetch ledgers.
-    let full_node = "wss://ws.rococo.dolphin.engineering:443";
+    let full_node = "ws://127.0.0.1:9800";
     // db path to save
     let sync_db = "local_sync.db";
     let pool_size = 16u32;

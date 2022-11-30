@@ -18,7 +18,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum IndexerError {
-    #[error("The resuest is timeout.")]
+    #[error("The result is timeout.")]
     RequestTimeOut,
     #[error("Seems full node doesn't work.")]
     FullNodeIsDown,
@@ -26,9 +26,9 @@ pub enum IndexerError {
     DbFetchError(#[from] sqlx::Error),
     #[error("Failed to convert utxo.")]
     BadUtxo,
-    #[error("Failed to decode as codec foramt.")]
-    DecodedError,
-    #[error("JsonRpsee Error: {0}.")]
+    #[error("Failed to decode as codec format, type =  {0}")]
+    DecodedError (String),
+    #[error("Jsonrpsee Error: {0}.")]
     JsonRpseeError(#[from] jsonrpsee::core::error::Error),
     #[error("Wrong config file(config.toml).")]
     WrongConfig,

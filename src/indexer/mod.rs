@@ -24,8 +24,8 @@ use sqlx::sqlite::SqlitePool;
 pub mod pull;
 pub mod sync;
 
-pub const MAX_SENDERS: u64 = 1024 * 16;
-pub const MAX_RECEIVERS: u64 = 1024 * 16;
+pub const MAX_SENDERS: u64 = 1024 * 4;
+pub const MAX_RECEIVERS: u64 = 1024 * 4;
 
 #[rpc(server, namespace = "mantaPay")]
 pub trait MantaPayIndexerApi {
@@ -61,14 +61,12 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
         mut max_receivers: u64,
         mut max_senders: u64,
     ) -> RpcResult<PullResponse> {
-        // Currently, there's a limit on max size of reposne body, 10MB.
-        // So 10MB means the params for (max_receivers, max_senders) is (1024 * 16, 1024 * 16).
-        // If the params exceeds the value, pull_ledger_diff still returns 1024 * 16 utxos at most in one time.
+        // Currently, there's a limit on max size of response body, 10MB.
+        // We need to limit the max amount according to ReceiverChunk and SenderChunk.
+        // If the params exceeds the value, pull_ledger_diff still returns limitation data at most in one time.
         // so no error will be returned.
-        if max_receivers > MAX_RECEIVERS || max_senders > MAX_SENDERS {
-            max_receivers = MAX_RECEIVERS;
-            max_senders = MAX_SENDERS;
-        }
+        max_receivers = max_receivers.min(MAX_RECEIVERS);
+        max_senders = max_senders.min(MAX_SENDERS);
 
         let response =
             pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)

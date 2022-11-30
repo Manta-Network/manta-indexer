@@ -134,6 +134,3 @@ export function decodeDensePullResponse(dense: any) {
         senders: sender_chunk,
     }
 }
-
-
-console.log(decodeDensePullResponse(demo));

@@ -218,7 +218,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await?;
 
     let mut current_checkpoint = Checkpoint::default();
-    let (max_sender_count, max_receiver_count) = (1024 * 8, 1024 * 8);
+    let (max_sender_count, max_receiver_count) = (1024, 1024);
 
     let mut counter = 0;
     let mut total_items = 0;
@@ -238,7 +238,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
                 resp.senders.len(),
                 resp.receivers.len(),
                 current_checkpoint
-            )
+            );
         }
 
         let shards = reconstruct_shards_from_pull_response(&resp).await?;
