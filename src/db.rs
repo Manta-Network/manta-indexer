@@ -162,7 +162,7 @@ pub async fn insert_one_nullifier(
     Ok(())
 }
 
-/// Instead of insert with specific idx, just append a new void number record with auto increasing idx primary key.
+/// Instead of insert with specific idx, just append a new nullifier commitment record with auto increasing idx primary key.
 pub async fn append_nullifier(
     pool: &SqlitePool,
     nc: &NullifierCommitment,
@@ -207,7 +207,7 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
     Ok(ckp)
 }
 
-/// Whether the void number exists in the db or not.
+/// Whether the nullifier exists in the db or not.
 pub async fn has_nullifier(pool: &SqlitePool, nullifier_index: u64) -> bool {
     let n = nullifier_index as i64;
     let one = sqlx::query("SELECT nullifier_commitment FROM nullifier WHERE idx = ?1;")
@@ -341,7 +341,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     let pool = initialize_db_pool(&db_path, pool_size).await?;
 
     // if the db is empty, pull utxos.
-    if let Err(_) | Ok(0) = get_len_of_nullifier(&pool).await {
+    if !has_shard(&pool, 0, 0).await {
         crate::indexer::sync::pull_all_shards_to_db(&pool, node).await?;
     }
 
@@ -362,13 +362,13 @@ mod tests {
 
     #[tokio::test]
     async fn get_one_shard_should_work() {
-        let pool = create_test_db_or_first_pull(false).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..50);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
         let utxo_index = utxo_index_between.sample(&mut rng);
@@ -380,13 +380,13 @@ mod tests {
 
     #[tokio::test]
     async fn has_shard_should_work() {
-        let pool = create_test_db_or_first_pull(false).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..50);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
         let utxo_index = utxo_index_between.sample(&mut rng);
@@ -400,13 +400,13 @@ mod tests {
 
     #[tokio::test]
     async fn get_batched_shards_should_work() {
-        let pool = create_test_db_or_first_pull(false).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..50);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
         let mut from_utxo_index = utxo_index_between.sample(&mut rng);
@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn insert_void_numbers_should_work() {
+    async fn insert_nullifier_should_work() {
         let tmp_db = tempfile::Builder::new()
             .prefix("tmp-utxo")
             .suffix(&".db")
@@ -514,11 +514,11 @@ mod tests {
         let on = OutgoingNote::default();
         assert!(insert_one_nullifier(&pool, i, &nc, &on).await.is_ok());
 
-        // query one void number
+        // query one nullifier commitment
         let _nc = get_one_nullifier(&pool, i).await;
         assert_eq!(_nc.unwrap(), (nc, on));
 
-        let (start, end) = (1u64, 5u64);
+        let (start, end) = (2u64, 6u64);
         for i in start..=end {
             let new_nc = [i as u8; 32];
             let new_on = OutgoingNote {

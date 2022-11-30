@@ -24,8 +24,8 @@ use sqlx::sqlite::SqlitePool;
 pub mod pull;
 pub mod sync;
 
-pub const MAX_SENDERS: u64 = 1024 * 16;
-pub const MAX_RECEIVERS: u64 = 1024 * 16;
+pub const MAX_SENDERS: u64 = 1024 * 6;
+pub const MAX_RECEIVERS: u64 = 1024 * 6;
 
 #[rpc(server, namespace = "mantaPay")]
 pub trait MantaPayIndexerApi {

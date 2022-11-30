@@ -30,7 +30,7 @@ pub async fn calculate_next_checkpoint(
     next_checkpoint: &mut Checkpoint,
     sender_index: usize,
 ) {
-    // point to next void number
+    // point to next nullifier commitment
     next_checkpoint.sender_index += sender_index;
     let mut stream_shards = tokio_stream::iter(previous_shards.iter());
     while let Some((i, utxos)) = stream_shards.next().await {
@@ -107,8 +107,10 @@ pub async fn pull_receivers_for_shard(
         }
         *receivers_pulled += 1;
         let mut utxo = shard.utxo.as_slice();
-        let n: (Utxo, FullIncomingNote) = <(Utxo, FullIncomingNote) as Decode>::decode(&mut utxo)?;
-        receivers.push(n);
+        let mut note = shard.full_incoming_note.as_slice();
+        let u = <Utxo as Decode>::decode(&mut utxo)?;
+        let n = <FullIncomingNote as Decode>::decode(&mut note)?;
+        receivers.push((u, n));
 
         idx += 1;
     }
