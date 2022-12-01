@@ -21,6 +21,6 @@ ping_interval = 30 # in second
 
 [db.configuration]
 # sqlite db file path
-db_path = "stress.db"
+db_path = "utxo.db"
 # connection pool size.
 pool_size = 16
