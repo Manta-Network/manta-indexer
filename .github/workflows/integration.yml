@@ -46,6 +46,7 @@ jobs:
               ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
           yarn
           yarn build
+          yarn start ${{ github.workspace }}/.github/resources/dolphin-ci.json
           pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin-ci.json
       - name: Build and Start Indexer 
         run: |
