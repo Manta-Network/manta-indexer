@@ -4,9 +4,12 @@ import {dolphinFullNode, dolphinFullNodeLocal, indexerAddress} from "./config.js
 import createPromiseApi from "./utils";
 import {assert} from "chai";
 import {performance} from "perf_hooks";
+import {decodeU8a} from "@polkadot/types-codec";
+import {TypeRegistry, Metadata} from "@polkadot/types";
+import {BN} from "@polkadot/util";
 
 describe("indexer stress test", function () {
-    const max_concurrent = 3;
+    const max_concurrent = 5;
     const receiver_shard_num = 256;
     const max_receiver_num = 1024;
     const max_sender_num = 1024;
@@ -85,7 +88,6 @@ describe("indexer stress test", function () {
         console.log("baseline stress test finish %d loop, qps = %d, avg = %d ms, p99 = %d ms", count, qps, avg_latency, p99_latency)
     })
 
-
     it("optimized dense stress test", async function () {
         const total_receivers = 5000000;
         const total_senders = 5000000;
@@ -142,6 +144,56 @@ describe("indexer stress test", function () {
         console.log("stress test finish %d loop, qps = %d, avg = %d ms, p99 = %d ms", count, qps, avg_latency, p99_latency)
     })
 
+    it.only("test initialization time", async function () {
+        const total_receivers = 5000000;
+        const total_senders = 5000000;
+        let user_thread_cost: number[] = [];
+        let log_counter = 0;
+
+        const one_user_thread = async function (api: ApiPromise) {
+            let ri = new Array<number>(receiver_shard_num).fill(0);
+            let si = 0;
+            let data: any;
+            let before = performance.now();
+            do {
+                data = await (api.rpc as any).mantaPay.densely_pull_ledger_diff(
+                    {
+                        receiver_index: ri,
+                        sender_index: si,
+                    },
+                    BigInt(max_receiver_num), BigInt(max_sender_num)
+                );
+                ri = data.next_checkpoint.receiver_index;
+                si = data.next_checkpoint.sender_index;
+            } while (data.should_continue == true)
+            let cost = performance.now() - before;
+            user_thread_cost.push(cost);
+            console.log("finish a user thread loop in %d ms", cost)
+        }
+
+        let stop = false;
+        setTimeout(function () {
+            stop = true
+        }, duration_sec_each_test_case * 1000);
+
+        let count = 0;
+        let task_queue = [];
+        while (!stop) {
+            for (let i = 0; i < max_concurrent; ++i) {
+                task_queue.push(one_user_thread(indexer_apis[i]));
+            }
+            await Promise.all(task_queue);
+            count += 1;
+        }
+
+        // calculate summary
+        user_thread_cost.sort(function (a, b) {
+            return a - b;
+        });
+        let avg_latency = (user_thread_cost.reduce((acc, val) => acc + val, 0) / user_thread_cost.length).toFixed(2);
+        console.log("stress test finish %d loop, finish %d user's initialization, avg = %d ms", count, user_thread_cost.length, avg_latency)
+    })
+
     it.skip("stress test for connection", async function () {
         // create a lot of client to connect and disconnect.
         // why this case here is that we found in some case
@@ -156,6 +208,19 @@ describe("indexer stress test", function () {
             let clients = await Promise.all(client_queue);
             clients.forEach((client) => client.disconnect());
         }
+    })
+
+    it.skip("a", async function () {
+        let ri = new Array<number>(receiver_shard_num).fill(0);
+        let si = 0;
+        const data = await (indexer_apis[0].rpc as any).mantaPay.densely_pull_ledger_diff(
+            {
+                receiver_index: ri,
+                sender_index: si,
+            },
+            BigInt(max_receiver_num), BigInt(max_sender_num)
+        );
+        console.log(data);
     })
 
     after(async function () {

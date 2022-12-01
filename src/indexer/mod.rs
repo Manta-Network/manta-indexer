@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::indexer::sync::reconstruct_shards_from_pull_response;
 use crate::types::{Checkpoint, DensePullResponse, PullResponse};
+use codec::Encode;
 use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
@@ -58,22 +60,13 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
     async fn pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
-        mut max_receivers: u64,
-        mut max_senders: u64,
+        max_receivers: u64,
+        max_senders: u64,
     ) -> RpcResult<PullResponse> {
-        // Currently, there's a limit on max size of response body, 10MB.
-        // We need to limit the max amount according to ReceiverChunk and SenderChunk.
-        // If the params exceeds the value, pull_ledger_diff still returns limitation data at most in one time.
-        // so no error will be returned.
-        max_receivers = max_receivers.min(MAX_RECEIVERS);
-        max_senders = max_senders.min(MAX_SENDERS);
-
-        let response =
-            pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
-                .await
-                .map_err(|e| JsonRpseeError::Custom(e.to_string()))?;
-
-        Ok(response)
+        let response = self
+            .pull_ledger_diff_impl(checkpoint, max_receivers, max_senders)
+            .await?;
+        Ok(response.0)
     }
 
     async fn densely_pull_ledger_diff(
@@ -82,15 +75,42 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
         max_receivers: u64,
         max_senders: u64,
     ) -> RpcResult<DensePullResponse> {
-        let raw = self
-            .pull_ledger_diff(checkpoint, max_receivers, max_senders)
+        let (raw, next_checkpoint) = self
+            .pull_ledger_diff_impl(checkpoint, max_receivers, max_senders)
             .await?;
-        Ok(raw.into())
+        Ok(DensePullResponse {
+            sender_receivers_total: raw.senders_receivers_total,
+            receiver_len: raw.receivers.len(),
+            receivers: hex::encode(raw.receivers.encode()),
+            sender_len: raw.senders.len(),
+            senders: hex::encode(raw.senders.encode()),
+            should_continue: raw.should_continue,
+            next_checkpoint,
+        })
     }
 }
 
 impl MantaPayIndexerServer {
     pub fn new(db_pool: SqlitePool) -> Self {
         Self { db_pool }
+    }
+
+    async fn pull_ledger_diff_impl(
+        &self,
+        checkpoint: Checkpoint,
+        mut max_receivers: u64,
+        mut max_senders: u64,
+    ) -> RpcResult<(PullResponse, Checkpoint)> {
+        // Currently, there's a limit on max size of response body, 10MB.
+        // We need to limit the max amount according to ReceiverChunk and SenderChunk.
+        // If the params exceeds the value, pull_ledger_diff still returns limitation data at most in one time.
+        // so no error will be returned.
+        max_receivers = max_receivers.min(MAX_RECEIVERS);
+        max_senders = max_senders.min(MAX_SENDERS);
+        Ok(
+            pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
+                .await
+                .map_err(|e| JsonRpseeError::Custom(e.to_string()))?,
+        )
     }
 }

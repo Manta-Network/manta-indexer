@@ -138,17 +138,11 @@ pub struct DensePullResponse {
     pub senders: String,
     /// Same with raw `PullResponse`
     pub should_continue: bool,
+    /// Next request checkpoint calculated from server.
+    /// If should_continue = false, this data makes no sense.
+    /// Else, the client can just use this one as next request cursor,
+    /// It avoids complex computing on the client side,
+    /// and the potential risk of inconsistent computing rules between the client and server
+    pub next_checkpoint: Checkpoint,
 }
 
-impl From<PullResponse> for DensePullResponse {
-    fn from(raw: PullResponse) -> Self {
-        Self {
-            sender_receivers_total: raw.senders_receivers_total,
-            receiver_len: raw.receivers.len(),
-            receivers: hex::encode(raw.receivers.encode()),
-            sender_len: raw.senders.len(),
-            senders: hex::encode(raw.senders.encode()),
-            should_continue: raw.should_continue,
-        }
-    }
-}

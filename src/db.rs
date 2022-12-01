@@ -60,8 +60,8 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
     Ok(pool)
 }
 
-/// Whether the shard exists in the db or not.
-pub async fn has_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
+/// Whether the sharded item exists in the db or not.
+pub async fn has_item(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
     let n = utxo_index as i64;
 
     let one = sqlx::query("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
@@ -91,22 +91,19 @@ pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) 
 }
 
 /// Get a batched shard from db.
-/// [from_utxo_index, to_utxo_index], including the start and the end.
+/// [utxo_index_beginning, utxo_index_ending), including the start, not including the end.
 pub async fn get_batched_shards(
     pool: &SqlitePool,
     shard_index: u8,
-    from_utxo_index: u64,
-    to_utxo_index: u64,
+    utxo_index_beginning: u64,
+    utxo_index_ending: u64,
 ) -> Result<Vec<Shard>> {
-    let from = from_utxo_index as i64;
-    let to = to_utxo_index as i64;
-
     let batched_shard = sqlx::query_as(
-        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index BETWEEN ?2 and ?3;",
+        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index >= ?2 and utxo_index < ?3;",
     )
     .bind(shard_index)
-    .bind(from)
-    .bind(to)
+    .bind(utxo_index_beginning as i64)
+    .bind(utxo_index_ending as i64)
     .fetch_all(pool)
     .await;
 
@@ -149,7 +146,7 @@ pub async fn insert_one_nullifier(
     let mut conn = pool.acquire().await?;
     let mut tx = conn.begin().await?;
     let _row_at = sqlx::query(
-        "INSERT INTO nullifier (idx, nullifier_commitment, outgoing_note) VALUES (?1, ?2, ?3);",
+        "INSERT OR REPLACE INTO nullifier (idx, nullifier_commitment, outgoing_note) VALUES (?1, ?2, ?3);",
     )
     .bind(n)
     .bind(nc.encode())
@@ -394,12 +391,12 @@ mod tests {
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
         let utxo_index = utxo_index_between.sample(&mut rng);
-        assert!(has_shard(&pool, shard_index, utxo_index).await);
+        assert!(has_item(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
 
         // This shard should not exist.
-        assert!(!has_shard(&pool, shard_index, invalid_utxo_index).await);
+        assert!(!has_item(&pool, shard_index, invalid_utxo_index).await);
     }
 
     #[tokio::test]
@@ -502,7 +499,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn insert_void_numbers_should_work() {
+    async fn insert_nullifier_should_work() {
         let tmp_db = tempfile::Builder::new()
             .prefix("tmp-utxo")
             .suffix(&".db")
@@ -522,8 +519,8 @@ mod tests {
         let _nc = get_one_nullifier(&pool, i).await;
         assert_eq!(_nc.unwrap(), (nc, on));
 
-        let (start, end) = (1u64, 5u64);
-        for i in start..=end {
+        let (start, end) = (1u64, 6u64);
+        for i in start..end {
             let new_nc = [i as u8; 32];
             let new_on = OutgoingNote {
                 ephemeral_public_key: [i as u8; 32],
@@ -538,7 +535,7 @@ mod tests {
         assert!(batch_nc.is_ok());
         let batch_nc = batch_nc.unwrap();
 
-        for (i, _nc) in (start..=end).zip(batch_nc) {
+        for (i, _nc) in (start..end).zip(batch_nc) {
             let new_nc = [i as u8; 32];
             let new_on = OutgoingNote {
                 ephemeral_public_key: [i as u8; 32],

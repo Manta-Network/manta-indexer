@@ -75,6 +75,7 @@ export const manta_pay_types = {
         sender_len: 'u64',
         senders: 'String',
         senders_receivers_total: 'u128',
+        next_checkpoint: 'Checkpoint',
     }
 };
 

@@ -25,6 +25,7 @@ use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::{
     config::utxo::v3::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
+    manta_accounting::transfer::utxo::v3::Utxo as V3Utxo,
     manta_parameters::{self, Get},
     manta_util::codec::Decode as _,
 };
@@ -110,7 +111,7 @@ pub async fn sync_shards_from_full_node(
         while let Some((shard_index, shard)) = stream_shards.next().await {
             for (utxo_index, sh) in shard.iter().enumerate() {
                 let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
-                if !crate::db::has_shard(pool, *shard_index, utxo_index as u64 + offset).await {
+                if !crate::db::has_item(pool, *shard_index, utxo_index as u64 + offset).await {
                     let (utxo, note) = &sh;
                     crate::db::insert_one_shard(
                         pool,
@@ -368,7 +369,8 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
             max_sender_count,
             max_receiver_count,
         )
-        .await?;
+        .await?
+        .0;
 
         let shards = reconstruct_shards_from_pull_response(&resp).await?;
         super::pull::calculate_next_checkpoint(
