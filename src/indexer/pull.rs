@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::constants::*;
 use crate::types::{Checkpoint, FullIncomingNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
@@ -31,7 +30,7 @@ pub async fn calculate_next_checkpoint(
     next_checkpoint: &mut Checkpoint,
     sender_index: usize,
 ) {
-    // point to next void number
+    // point to next nullifier commitment
     next_checkpoint.sender_index += sender_index;
     let mut stream_shards = tokio_stream::iter(previous_shards.iter());
     while let Some((i, utxos)) = stream_shards.next().await {
@@ -57,7 +56,7 @@ pub async fn pull_receivers(
 ) -> Result<(bool, ReceiverIndexArray, ReceiverChunk)> {
     let mut more_receivers = false;
     let mut receivers = Vec::new();
-    let mut next_indices = receiver_indices.clone();
+    let mut next_indices = receiver_indices;
     let mut remain = max_amount;
 
     for (shard_index, utxo_index) in receiver_indices.into_iter().enumerate() {

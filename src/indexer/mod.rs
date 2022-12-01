@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::indexer::sync::reconstruct_shards_from_pull_response;
 use crate::types::{Checkpoint, DensePullResponse, PullResponse};
 use codec::Encode;
 use jsonrpsee::{
@@ -107,10 +106,9 @@ impl MantaPayIndexerServer {
         // so no error will be returned.
         max_receivers = max_receivers.min(MAX_RECEIVERS);
         max_senders = max_senders.min(MAX_SENDERS);
-        Ok(
-            pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
-                .await
-                .map_err(|e| JsonRpseeError::Custom(e.to_string()))?,
-        )
+
+        pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
+            .await
+            .map_err(|e| JsonRpseeError::Custom(e.to_string()))
     }
 }

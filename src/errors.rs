@@ -27,7 +27,7 @@ pub enum IndexerError {
     #[error("Failed to convert utxo.")]
     BadUtxo,
     #[error("Failed to decode as codec format, type =  {0}")]
-    DecodedError (String),
+    DecodedError(String),
     #[error("Jsonrpsee Error: {0}.")]
     JsonRpseeError(#[from] jsonrpsee::core::error::Error),
     #[error("Wrong config file(config.toml).")]

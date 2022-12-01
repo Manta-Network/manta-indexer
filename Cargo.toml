@@ -4,9 +4,9 @@ version = "4.0.0"
 edition = "2021"
 rust-version = "1.58"
 default-run = "manta-indexer"
-homepage = 'https://manta.network'
-license = 'GPL-3.0'
-repository = 'https://github.com/Manta-Network/manta-indexer/'
+homepage = "https://manta.network"
+license = "GPL-3.0"
+repository = "https://github.com/Manta-Network/manta-indexer/"
 
 [dependencies]
 # error handler crates
@@ -14,12 +14,12 @@ anyhow = "1.0.65"
 thiserror = "1.0.37"
 
 # substrate crates
-frame-support = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
-sc-transaction-pool-api = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
-sp-core = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
-sp-rpc = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
-sp-runtime = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
-sp-version = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.26" }
+frame-support = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sc-transaction-pool-api = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-core = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-rpc = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-runtime = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
+sp-version = { git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.26" }
 
 # log crates
 log4rs = "1.2"
@@ -28,7 +28,7 @@ log4rs = "1.2"
 manta-crypto = { git = "https://github.com/manta-network/manta-rs.git", branch = "feat/new-circuits" }
 manta-pay = { git = "https://github.com/manta-network/manta-rs.git", branch = "feat/new-circuits", features = ["groth16", "scale", "serde"] }
 manta-util = { git = "https://github.com/manta-network/manta-rs.git", branch = "feat/new-circuits" }
-pallet-manta-pay = { git = "https://github.com/manta-network/Manta.git", branch = "ghzlatarev/dolphin-v3-2", features = ["rpc", "runtime"] }
+pallet-manta-pay = { git = "https://github.com/manta-network/Manta.git", branch = "manta", features = ["rpc", "runtime"] }
 
 # general crates
 chrono = "0.4.23"
@@ -49,13 +49,13 @@ sqlx = { version = "0.6.2", features = ["sqlite", "runtime-tokio-rustls", "macro
 tokio = { version = "1.21", features = ["rt", "macros", "sync", "rt-multi-thread"] }
 tokio-stream = "0.1.11"
 toml = "0.5"
-base64 = "0.13"
 
 [dev-dependencies]
 criterion = "0.4.0"
 manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git", branch = "v3.4.3" }
 rand = "0.8.5"
 tempfile = "3.3.0"
+base64 = "0.13"
 
 [[bench]]
 name = "db_bench"

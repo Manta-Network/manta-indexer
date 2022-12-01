@@ -86,3 +86,10 @@ sqlx migrate run
 ```shell
 cargo t
 ```
+
+## How to generate precompiled coins?
+```
+git clone https://github.com/Manta-Network/Manta.git
+cd Manta
+cargo run --release --features precompute-coins -p pallet-manta-pay --bin precompute_coins
+```

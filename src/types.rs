@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use codec::Encode;
 use serde::{Deserialize, Serialize};
 use std::mem;
 
@@ -145,4 +144,3 @@ pub struct DensePullResponse {
     /// and the potential risk of inconsistent computing rules between the client and server
     pub next_checkpoint: Checkpoint,
 }
-

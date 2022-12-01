@@ -25,7 +25,6 @@ use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::{
     config::utxo::v3::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
-    manta_accounting::transfer::utxo::v3::Utxo as V3Utxo,
     manta_parameters::{self, Get},
     manta_util::codec::Decode as _,
 };
@@ -84,7 +83,7 @@ pub async fn reconstruct_shards_from_pull_response(
 2. With latest checkpoint, trigger one synchronization in each 2 seconds.
 3. In current synchronization, if `should_continue` == true, accumlate shards to current checkpoint,
    then send next shard request until `should_continue` == false.
-4. Save every new shards to each corresponding shard index, and void number.
+4. Save every new shards to each corresponding shard index, and nullifier commitment.
 5.
 */
 pub async fn sync_shards_from_full_node(
@@ -414,13 +413,13 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
-        let file =
-            File::open("./tests/integration-tests/precompile-coins/precomputed_mints_v0").unwrap();
+        let file = File::open("./tests/integration-tests/precompile-coins/v1/precomputed_mints_v1")
+            .unwrap();
         let mut buf_reader = BufReader::new(file);
         let mut contents = Vec::new();
         buf_reader.read_to_end(&mut contents).unwrap();
-        let coin_size = 349;
-        let off_set = 2;
+        let coin_size = 552;
+        let off_set = 1;
         let start = off_set;
 
         let seed = "//Alice";
@@ -456,19 +455,19 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
-        let file =
-            File::open("./tests/integration-tests/precompile-coins/precomputed_mints_v0").unwrap();
+        let file = File::open("./tests/integration-tests/precompile-coins/v1/precomputed_mints_v1")
+            .unwrap();
         let mut buf_reader = BufReader::new(file);
         let mut contents = Vec::new();
         buf_reader.read_to_end(&mut contents).unwrap();
-        let coin_size = 349;
-        let off_set = 2;
+        let coin_size = 552;
+        let off_set = 1;
 
         let seed = "//Alice";
         let signer =
             utils::create_signer_from_string::<MantaConfig, manta_xt::sr25519::Pair>(seed).unwrap();
 
-        let batch_size = 4;
+        let batch_size = 10;
         let coin_count = (contents.len() - off_set) / coin_size;
 
         let mut start = off_set;
@@ -565,12 +564,9 @@ mod tests {
                         .manta_pay()
                         .shards(shard_index as u8, i as u64);
                     let shard = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
-                    assert_ne!(shard.0, [0u8; UTXO_LENGTH]);
-                    assert_ne!(
-                        shard.1.ephemeral_public_key,
-                        [0u8; EPHEMERAL_PUBLIC_KEY_LENGTH]
-                    );
-                    assert_ne!(shard.1.ciphertext, [0u8; CIPHER_TEXT_LENGTH]);
+                    let (utxo, note) = shard;
+                    assert_ne!(utxo.encode(), Utxo::default().encode());
+                    assert_ne!(note.encode(), FullIncomingNote::default().encode());
                 }
             }
         }
@@ -590,9 +586,7 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let now = Instant::now();
         let r = pull_all_shards_to_db(&pool, url).await;
-        dbg!(now.elapsed().as_secs_f32());
         assert!(r.is_ok());
     }
 
@@ -618,8 +612,8 @@ mod tests {
     #[ignore]
     async fn bench_pull_shards_from_local_node() {
         let mut i_sum = 0f32;
-        let indexer = "ws://127.0.0.1:7788";
-        let times = 3;
+        let indexer = "ws://127.0.0.1:9800";
+        let times = 1;
         for _i in 0..times {
             i_sum += pull_ledger_diff_from_local_node(indexer).await.unwrap();
         }
@@ -636,7 +630,7 @@ mod tests {
 
         let mut checkpoint = Checkpoint::default();
         checkpoint.sender_index = 0usize;
-        let (max_sender_count, max_receiver_count) = (1024 * 16, 1024 * 16);
+        let (max_sender_count, max_receiver_count) = (1024 * 6, 1024 * 6);
 
         let resp =
             synchronize_ledger(&client, &checkpoint, max_sender_count, max_receiver_count).await;
