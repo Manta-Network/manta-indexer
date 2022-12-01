@@ -52,7 +52,7 @@ toml = "0.5"
 
 [dev-dependencies]
 criterion = "0.4.0"
-manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git", branch = "v3.4.3" }
+manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git", branch = "v4.0.0" }
 rand = "0.8.5"
 tempfile = "3.3.0"
 base64 = "0.13"

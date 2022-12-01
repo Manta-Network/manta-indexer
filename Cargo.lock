@@ -2725,8 +2725,8 @@ dependencies = [
 
 [[package]]
 name = "manta-xt"
-version = "3.4.3"
-source = "git+https://github.com/Manta-Network/manta-xt.git?branch=v3.4.3#90db1258391715da798eb1846051ae9619abedf7"
+version = "4.0.0"
+source = "git+https://github.com/Manta-Network/manta-xt.git?branch=v4.0.0#29df5caf68a7d10c4439f3d4c6c587419683b90c"
 dependencies = [
  "anyhow",
  "hex",
