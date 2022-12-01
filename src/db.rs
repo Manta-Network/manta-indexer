@@ -14,9 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::{SenderChunk, Shard, VoidNumber};
+use crate::types::{
+    Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, SenderChunk, Shard, Utxo,
+};
 use anyhow::Result;
-use manta_pay::signer::Checkpoint;
+use codec::{Decode, Encode};
 use sqlx::{
     migrate::{MigrateDatabase, Migrator},
     sqlite::{SqlitePool, SqlitePoolOptions},
@@ -59,15 +61,14 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
 }
 
 /// Whether the shard exists in the db or not.
-pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> bool {
-    let n = next_index as i64;
+pub async fn has_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
+    let n = utxo_index as i64;
 
-    let one: Result<Shard, _> =
-        sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and next_index = ?2;")
-            .bind(shard_index)
-            .bind(n)
-            .fetch_one(pool)
-            .await;
+    let one = sqlx::query("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
+        .bind(shard_index)
+        .bind(n)
+        .fetch_one(pool)
+        .await;
 
     match one {
         Ok(_) => true,
@@ -77,10 +78,10 @@ pub async fn has_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> b
 }
 
 /// Get a single shard from db.
-pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) -> Result<Shard> {
-    let n = next_index as i64;
+pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> Result<Shard> {
+    let n = utxo_index as i64;
 
-    let one = sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and next_index = ?2;")
+    let one = sqlx::query_as("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
         .bind(shard_index)
         .bind(n)
         .fetch_one(pool)
@@ -90,18 +91,18 @@ pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, next_index: u64) 
 }
 
 /// Get a batched shard from db.
-/// [from_next_index, to_next_index], including the start and the end.
+/// [from_utxo_index, to_utxo_index], including the start and the end.
 pub async fn get_batched_shards(
     pool: &SqlitePool,
     shard_index: u8,
-    from_next_index: u64,
-    to_next_index: u64,
+    from_utxo_index: u64,
+    to_utxo_index: u64,
 ) -> Result<Vec<Shard>> {
-    let from = from_next_index as i64;
-    let to = to_next_index as i64;
+    let from = from_utxo_index as i64;
+    let to = to_utxo_index as i64;
 
     let batched_shard = sqlx::query_as(
-        "SELECT * FROM shards WHERE shard_index = ?1 and next_index BETWEEN ?2 and ?3;",
+        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index BETWEEN ?2 and ?3;",
     )
     .bind(shard_index)
     .bind(from)
@@ -115,18 +116,20 @@ pub async fn get_batched_shards(
 pub async fn insert_one_shard(
     pool: &SqlitePool,
     shard_index: u8,
-    next_index: u64,
-    encoded_utxo: Vec<u8>,
+    utxo_index: u64,
+    utxo: &Utxo,
+    note: &FullIncomingNote,
 ) -> Result<()> {
-    let n = next_index as i64;
+    let n = utxo_index as i64;
 
     let mut conn = pool.acquire().await?;
     let mut tx = conn.begin().await?;
     let _row_at =
-        sqlx::query("INSERT INTO shards (shard_index, next_index, utxo) VALUES (?1, ?2, ?3);")
+        sqlx::query("INSERT INTO shards (shard_index, utxo_index, utxo, full_incoming_note) VALUES (?1, ?2, ?3, ?4);")
             .bind(shard_index)
             .bind(n)
-            .bind(encoded_utxo)
+            .bind(utxo.encode())
+            .bind(note.encode())
             .execute(&mut tx)
             .await?;
 
@@ -135,35 +138,51 @@ pub async fn insert_one_shard(
     Ok(())
 }
 
-pub async fn insert_one_void_number(
+pub async fn insert_one_nullifier(
     pool: &SqlitePool,
-    vn_index: u64,
-    encoded_vn: Vec<u8>,
+    nullifier_index: u64,
+    nc: &NullifierCommitment,
+    on: &OutgoingNote,
 ) -> Result<()> {
-    let n = vn_index as i64;
+    let n = nullifier_index as i64;
 
     let mut conn = pool.acquire().await?;
-    let _row_at = sqlx::query("INSERT INTO void_number (idx, vn) VALUES (?1, ?2)")
-        .bind(n)
-        .bind(encoded_vn)
-        .execute(&mut conn)
-        .await;
+    let mut tx = conn.begin().await?;
+    let _row_at = sqlx::query(
+        "INSERT INTO nullifier (idx, nullifier_commitment, outgoing_note) VALUES (?1, ?2, ?3);",
+    )
+    .bind(n)
+    .bind(nc.encode())
+    .bind(on.encode())
+    .execute(&mut tx)
+    .await;
+
+    tx.commit().await?;
 
     Ok(())
 }
 
-/// Instead of insert with specific idx, just append a new void number record with auto increasing idx primary key.
-pub async fn append_void_number(pool: &SqlitePool, encoded_vn: Vec<u8>) -> Result<()> {
+/// Instead of insert with specific idx, just append a new nullifier commitment record with auto increasing idx primary key.
+pub async fn append_nullifier(
+    pool: &SqlitePool,
+    nc: &NullifierCommitment,
+    on: &OutgoingNote,
+) -> Result<()> {
     let mut conn = pool.acquire().await?;
-    sqlx::query("INSERT INTO void_number (vn) VALUES (?1)")
-        .bind(encoded_vn)
-        .execute(&mut conn)
+    let mut tx = conn.begin().await?;
+
+    sqlx::query("INSERT INTO nullifier (nullifier_commitment, outgoing_note) VALUES (?1, ?2)")
+        .bind(nc.encode())
+        .bind(on.encode())
+        .execute(&mut tx)
         .await?;
+    tx.commit().await?;
+
     Ok(())
 }
 
-pub async fn get_len_of_void_number(pool: &SqlitePool) -> Result<usize> {
-    Ok(sqlx::query(r#"SELECT count(*) as count FROM void_number;"#)
+pub async fn get_len_of_nullifier(pool: &SqlitePool) -> Result<usize> {
+    Ok(sqlx::query(r#"SELECT count(*) as count FROM nullifier;"#)
         .fetch_one(pool)
         .await?
         .get::<u32, _>("count") as usize)
@@ -183,15 +202,15 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
 
         ckp.receiver_index[shard_index as usize] = count_of_utxo.0 as usize;
     }
-    ckp.sender_index = get_len_of_void_number(pool).await?;
+    ckp.sender_index = get_len_of_nullifier(pool).await?;
 
     Ok(ckp)
 }
 
-/// Whether the void number exists in the db or not.
-pub async fn has_void_number(pool: &SqlitePool, vn_index: u64) -> bool {
-    let n = vn_index as i64;
-    let one = sqlx::query("SELECT vn FROM void_number WHERE idx = ?1;")
+/// Whether the nullifier exists in the db or not.
+pub async fn has_nullifier(pool: &SqlitePool, nullifier_index: u64) -> bool {
+    let n = nullifier_index as i64;
+    let one = sqlx::query("SELECT nullifier_commitment FROM nullifier WHERE idx = ?1;")
         .bind(n)
         .fetch_one(pool)
         .await;
@@ -203,42 +222,53 @@ pub async fn has_void_number(pool: &SqlitePool, vn_index: u64) -> bool {
     }
 }
 
-pub async fn get_one_void_number(pool: &SqlitePool, vn_index: u64) -> Result<VoidNumber> {
-    let n = vn_index as i64;
-    let one_row = sqlx::query("SELECT vn FROM void_number WHERE idx = ?1;")
+pub async fn get_one_nullifier(
+    pool: &SqlitePool,
+    nullifier_index: u64,
+) -> Result<(NullifierCommitment, OutgoingNote)> {
+    let n = nullifier_index as i64;
+    let one_row = sqlx::query("SELECT * FROM nullifier WHERE idx = ?1;")
         .bind(n)
         .fetch_one(pool)
         .await?;
-    let one: VoidNumber = one_row
-        .get::<Vec<u8>, _>("vn")
+    let nc: NullifierCommitment = one_row
+        .get::<Vec<u8>, _>("nullifier_commitment")
         .try_into()
         .map_err(|_| crate::errors::IndexerError::DecodedError)?;
 
-    Ok(one)
+    let mut _on = one_row.get::<&[u8], _>("outgoing_note");
+    let on = <OutgoingNote as Decode>::decode(&mut _on)?;
+
+    Ok((nc, on))
 }
 
-pub async fn get_batched_void_number(
+pub async fn get_batched_nullifier(
     pool: &SqlitePool,
-    from_vn_index: u64,
-    to_vn_index: u64,
+    from_nullifier_index: u64,
+    to_nullifier_index: u64,
 ) -> Result<SenderChunk> {
-    let from = from_vn_index as i64;
-    let to = to_vn_index as i64;
-    let batched_vns = sqlx::query("SELECT vn FROM void_number WHERE idx BETWEEN ?1 and ?2;")
-        .bind(from)
-        .bind(to)
-        .fetch_all(pool)
-        .await?;
-    let mut vns = Vec::with_capacity(batched_vns.len());
-    for i in &batched_vns {
-        let vn: VoidNumber = i
-            .get::<Vec<u8>, _>("vn")
+    let from = from_nullifier_index as i64;
+    let to = to_nullifier_index as i64;
+    let batched_nullifiers = sqlx::query(
+        "SELECT nullifier_commitment, outgoing_note FROM nullifier WHERE idx BETWEEN ?1 and ?2;",
+    )
+    .bind(from)
+    .bind(to)
+    .fetch_all(pool)
+    .await?;
+    let mut nullifiers = Vec::with_capacity(batched_nullifiers.len());
+    for i in &batched_nullifiers {
+        let nc: NullifierCommitment = i
+            .get::<Vec<u8>, _>("nullifier_commitment")
             .try_into()
             .map_err(|_| crate::errors::IndexerError::DecodedError)?;
-        vns.push(vn)
+
+        let mut _on = i.get::<&[u8], _>("outgoing_note");
+        let on = <OutgoingNote as Decode>::decode(&mut _on)?;
+        nullifiers.push((nc, on))
     }
 
-    Ok(vns)
+    Ok(nullifiers)
 }
 
 pub async fn update_or_insert_total_senders_receivers(
@@ -311,7 +341,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     let pool = initialize_db_pool(&db_path, pool_size).await?;
 
     // if the db is empty, pull utxos.
-    if let Err(_) | Ok(0) = get_len_of_void_number(&pool).await {
+    if !has_shard(&pool, 0, 0).await {
         crate::indexer::sync::pull_all_shards_to_db(&pool, node).await?;
     }
 
@@ -321,7 +351,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Shard;
+    use crate::types::{FullIncomingNote, Shard, UtxoTransparency};
     use rand::distributions::{Distribution, Uniform};
 
     #[tokio::test]
@@ -332,17 +362,17 @@ mod tests {
 
     #[tokio::test]
     async fn get_one_shard_should_work() {
-        let pool = create_test_db_or_first_pull(false).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let next_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..50);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
-        let next_index = next_index_between.sample(&mut rng);
-        let one_shard = get_one_shard(&pool, shard_index, next_index).await;
+        let utxo_index = utxo_index_between.sample(&mut rng);
+        let one_shard = get_one_shard(&pool, shard_index, utxo_index).await;
 
         assert!(one_shard.is_ok());
         assert_eq!(one_shard.as_ref().unwrap().shard_index, shard_index);
@@ -350,52 +380,52 @@ mod tests {
 
     #[tokio::test]
     async fn has_shard_should_work() {
-        let pool = create_test_db_or_first_pull(false).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let next_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..50);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
-        let next_index = next_index_between.sample(&mut rng);
-        assert!(has_shard(&pool, shard_index, next_index).await);
+        let utxo_index = utxo_index_between.sample(&mut rng);
+        assert!(has_shard(&pool, shard_index, utxo_index).await);
 
-        let invalid_next_index = u64::MAX;
+        let invalid_utxo_index = u64::MAX;
 
         // This shard should not exist.
-        assert!(!has_shard(&pool, shard_index, invalid_next_index).await);
+        assert!(!has_shard(&pool, shard_index, invalid_utxo_index).await);
     }
 
     #[tokio::test]
     async fn get_batched_shards_should_work() {
-        let pool = create_test_db_or_first_pull(false).await;
+        let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
         let pool = pool.unwrap();
 
         let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let next_index_between = Uniform::from(0..300);
+        let utxo_index_between = Uniform::from(0..50);
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
-        let mut from_next_index = next_index_between.sample(&mut rng);
-        let mut to_next_index = next_index_between.sample(&mut rng);
+        let mut from_utxo_index = utxo_index_between.sample(&mut rng);
+        let mut to_utxo_index = utxo_index_between.sample(&mut rng);
 
-        if to_next_index < from_next_index {
-            std::mem::swap(&mut to_next_index, &mut from_next_index);
+        if to_utxo_index < from_utxo_index {
+            std::mem::swap(&mut to_utxo_index, &mut from_utxo_index);
         }
-        assert!(to_next_index > from_next_index);
+        assert!(to_utxo_index > from_utxo_index);
 
         let batched_shards =
-            get_batched_shards(&pool, shard_index, from_next_index, to_next_index).await;
+            get_batched_shards(&pool, shard_index, from_utxo_index, to_utxo_index).await;
 
         assert!(batched_shards.is_ok());
 
         let batched_shards = batched_shards.unwrap();
         assert_eq!(
             batched_shards.len(),
-            (to_next_index - from_next_index + 1) as usize
+            (to_utxo_index - from_utxo_index + 1) as usize
         );
     }
 
@@ -413,23 +443,31 @@ mod tests {
 
         let mut pool = pool.unwrap();
 
-        let utxo = vec![100u8; 132];
+        let utxo = Utxo {
+            transparency: UtxoTransparency::Opaque,
+            ..Default::default()
+        };
+        let note = FullIncomingNote {
+            address_partition: 1,
+            ..Default::default()
+        };
         let shard_index = 0u8;
-        let next_index = 0u64;
+        let utxo_index = 0u64;
         assert!(
-            insert_one_shard(&pool, shard_index, next_index, utxo.clone())
+            insert_one_shard(&pool, shard_index, utxo_index, &utxo, &note)
                 .await
                 .is_ok()
         );
 
-        let shard = get_one_shard(&pool, shard_index, next_index).await;
+        let shard = get_one_shard(&pool, shard_index, utxo_index).await;
         assert!(shard.is_ok());
         let shard = shard.unwrap();
 
         let orignal_shard = Shard {
             shard_index,
-            next_index: next_index as i64,
-            utxo: utxo,
+            utxo_index: utxo_index as i64,
+            utxo: utxo.encode(),
+            full_incoming_note: note.encode(),
         };
 
         assert!(clean_up(&mut pool, "shards").await.is_ok());
@@ -460,7 +498,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn insert_void_numbers_should_work() {
+    async fn insert_nullifier_should_work() {
         let tmp_db = tempfile::Builder::new()
             .prefix("tmp-utxo")
             .suffix(&".db")
@@ -472,30 +510,37 @@ mod tests {
         let pool = pool.unwrap();
 
         let i = 1;
-        let vn = [1u8; 32];
-        assert!(insert_one_void_number(&pool, i, vn.clone().into())
-            .await
-            .is_ok());
+        let nc = [1u8; 32];
+        let on = OutgoingNote::default();
+        assert!(insert_one_nullifier(&pool, i, &nc, &on).await.is_ok());
 
-        // query void number
-        let _vn = get_one_void_number(&pool, i).await;
-        assert_eq!(_vn.unwrap(), vn);
+        // query one nullifier commitment
+        let _nc = get_one_nullifier(&pool, i).await;
+        assert_eq!(_nc.unwrap(), (nc, on));
 
-        let (start, end) = (1u64, 5u64);
+        let (start, end) = (2u64, 6u64);
         for i in start..=end {
-            let vn = [i as u8; 32];
-            assert!(insert_one_void_number(&pool, i, vn.clone().into())
+            let new_nc = [i as u8; 32];
+            let new_on = OutgoingNote {
+                ephemeral_public_key: [i as u8; 32],
+                ..Default::default()
+            };
+            assert!(insert_one_nullifier(&pool, i, &new_nc, &new_on)
                 .await
                 .is_ok());
         }
 
-        let batch_vn = get_batched_void_number(&pool, start, end).await;
-        assert!(batch_vn.is_ok());
-        let batch_vn = batch_vn.unwrap();
+        let batch_nc = get_batched_nullifier(&pool, start, end).await;
+        assert!(batch_nc.is_ok());
+        let batch_nc = batch_nc.unwrap();
 
-        for (i, _vn) in (start..=end).zip(batch_vn) {
-            let vn = [i as u8; 32];
-            assert_eq!(_vn, vn);
+        for (i, _nc) in (start..=end).zip(batch_nc) {
+            let new_nc = [i as u8; 32];
+            let new_on = OutgoingNote {
+                ephemeral_public_key: [i as u8; 32],
+                ..Default::default()
+            };
+            assert_eq!(_nc, (new_nc, new_on));
         }
     }
 

@@ -14,19 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::PullResponse;
+use crate::types::{Checkpoint, PullResponse};
 use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 
 pub mod pull;
 pub mod sync;
 
-pub const MAX_SENDERS: u64 = 1024 * 16;
-pub const MAX_RECEIVERS: u64 = 1024 * 16;
+pub const MAX_SENDERS: u64 = 1024 * 6;
+pub const MAX_RECEIVERS: u64 = 1024 * 6;
 
 #[rpc(server, namespace = "mantaPay")]
 pub trait MantaPayIndexerApi {

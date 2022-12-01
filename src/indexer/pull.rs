@@ -15,23 +15,22 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::constants::*;
-use crate::types::{EncryptedNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
+use crate::types::{Checkpoint, FullIncomingNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
 use codec::Decode;
 use frame_support::log::{debug, trace};
-use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 /// Calculate the next checkpoint.
 pub async fn calculate_next_checkpoint(
-    previous_shards: &HashMap<u8, Vec<(Utxo, EncryptedNote)>>,
+    previous_shards: &HashMap<u8, ReceiverChunk>,
     previous_checkpoint: &Checkpoint,
     next_checkpoint: &mut Checkpoint,
     sender_index: usize,
 ) {
-    // point to next void number
+    // point to next nullifier commitment
     next_checkpoint.sender_index += sender_index;
     let mut stream_shards = tokio_stream::iter(previous_shards.iter());
     while let Some((i, utxos)) = stream_shards.next().await {
@@ -108,8 +107,10 @@ pub async fn pull_receivers_for_shard(
         }
         *receivers_pulled += 1;
         let mut utxo = shard.utxo.as_slice();
-        let n: (Utxo, EncryptedNote) = <(Utxo, EncryptedNote) as Decode>::decode(&mut utxo)?;
-        receivers.push(n);
+        let mut note = shard.full_incoming_note.as_slice();
+        let u = <Utxo as Decode>::decode(&mut utxo)?;
+        let n = <FullIncomingNote as Decode>::decode(&mut note)?;
+        receivers.push((u, n));
 
         idx += 1;
     }
@@ -127,18 +128,17 @@ pub async fn pull_senders(
         (sender_index as u64) + max_update_request
     };
 
-    let senders = if crate::db::has_void_number(pool, max_sender_index - 1).await {
-        crate::db::get_batched_void_number(pool, sender_index as u64, max_sender_index - 1).await?
+    let senders = if crate::db::has_nullifier(pool, max_sender_index - 1).await {
+        crate::db::get_batched_nullifier(pool, sender_index as u64, max_sender_index - 1).await?
     } else {
-        let length_of_vns = crate::db::get_len_of_void_number(pool).await? as u64;
+        let length_of_vns = crate::db::get_len_of_nullifier(pool).await? as u64;
         let senders =
-            crate::db::get_batched_void_number(pool, sender_index as u64, length_of_vns - 1)
-                .await?;
+            crate::db::get_batched_nullifier(pool, sender_index as u64, length_of_vns - 1).await?;
         return Ok((false, senders));
     };
 
     Ok((
-        crate::db::has_void_number(pool, max_sender_index as u64).await,
+        crate::db::has_nullifier(pool, max_sender_index as u64).await,
         senders,
     ))
 }

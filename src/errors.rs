@@ -24,8 +24,8 @@ pub enum IndexerError {
     FullNodeIsDown,
     #[error("Failed to fetch data from db due to: {0}.")]
     DbFetchError(#[from] sqlx::Error),
-    #[error("Wrong merkle tree index.")]
-    WrongMerkleTreeIndex,
+    #[error("Failed to convert utxo.")]
+    BadUtxo,
     #[error("Failed to decode as codec foramt.")]
     DecodedError,
     #[error("JsonRpsee Error: {0}.")]

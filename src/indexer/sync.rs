@@ -16,16 +16,18 @@
 
 ///! Sync shards from full node.
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
-use crate::types::{EncryptedNote, PullResponse, Utxo};
+use crate::types::{Checkpoint, FullIncomingNote, PullResponse, Utxo};
 use anyhow::Result;
-use codec::Encode;
 use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
-use manta_pay::config::MerkleTreeConfiguration;
-use manta_pay::signer::Checkpoint;
+use manta_pay::{
+    config::utxo::v3::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
+    manta_parameters::{self, Get},
+    manta_util::codec::Decode as _,
+};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -51,17 +53,22 @@ pub async fn synchronize_ledger(
 
 pub async fn reconstruct_shards_from_pull_response(
     pull_response: &PullResponse,
-) -> Result<HashMap<u8, Vec<(Utxo, EncryptedNote)>>> {
+) -> Result<HashMap<u8, Vec<(Utxo, FullIncomingNote)>>> {
     let mut shards =
-        HashMap::<u8, Vec<(Utxo, EncryptedNote)>>::with_capacity(pull_response.senders.len());
+        HashMap::<u8, Vec<(Utxo, FullIncomingNote)>>::with_capacity(pull_response.receivers.len());
     let mut stream_receivers = tokio_stream::iter(pull_response.receivers.iter());
+    let utxo_accumulator_item_hash = UtxoAccumulatorItemHash::decode(
+        manta_parameters::pay::testnet::parameters::UtxoAccumulatorItemHash::get()
+            .expect("Checksum did not match."),
+    )
+    .expect("Unable to decode the Merkle Tree Item Hash.");
     while let Some(receiver) = stream_receivers.next().await {
         let shard_index = MerkleTreeConfiguration::tree_index(
             &receiver
                 .0
-                .to_vec()
                 .try_into()
-                .map_err(|_| crate::errors::IndexerError::WrongMerkleTreeIndex)?,
+                .map_err(|_| crate::errors::IndexerError::BadUtxo)?
+                .item_hash(&utxo_accumulator_item_hash, &mut ()),
         );
         shards
             .entry(shard_index)
@@ -76,7 +83,7 @@ pub async fn reconstruct_shards_from_pull_response(
 2. With latest checkpoint, trigger one synchronization in each 2 seconds.
 3. In current synchronization, if `should_continue` == true, accumlate shards to current checkpoint,
    then send next shard request until `should_continue` == false.
-4. Save every new shards to each corresponding shard index, and void number.
+4. Save every new shards to each corresponding shard index, and nullifier commitment.
 5.
 */
 pub async fn sync_shards_from_full_node(
@@ -101,28 +108,29 @@ pub async fn sync_shards_from_full_node(
         // update shards
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
-            for (next_index, sh) in shard.iter().enumerate() {
+            for (utxo_index, sh) in shard.iter().enumerate() {
                 let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
-                if !crate::db::has_shard(pool, *shard_index, next_index as u64 + offset).await {
-                    let encoded_utxo = sh.encode();
+                if !crate::db::has_shard(pool, *shard_index, utxo_index as u64 + offset).await {
+                    let (utxo, note) = &sh;
                     crate::db::insert_one_shard(
                         pool,
                         *shard_index,
-                        next_index as u64 + offset,
-                        encoded_utxo,
+                        utxo_index as u64 + offset,
+                        utxo,
+                        note,
                     )
                     .await?;
                 }
             }
         }
 
-        // update void number
-        let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
-        let vn_checkpoint = crate::db::get_len_of_void_number(pool).await?;
-        while let Some((idx, vn)) = stream_vns.next().await {
-            let vn: Vec<u8> = (*vn).into();
-            let i = idx + vn_checkpoint;
-            crate::db::insert_one_void_number(pool, i as u64, vn).await?;
+        // update nullifier
+        let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
+        let nullifier_checkpoint = crate::db::get_len_of_nullifier(pool).await?;
+        while let Some((idx, nullifier)) = stream_nullifiers.next().await {
+            // let nullifier: Vec<u8> = (*_nullifier).into();
+            let i = idx + nullifier_checkpoint;
+            crate::db::insert_one_nullifier(pool, i as u64, &nullifier.0, &nullifier.1).await?;
         }
 
         // update total senders and receivers
@@ -210,7 +218,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
     let client = crate::utils::create_ws_client(ws).await?;
 
     let mut current_checkpoint = Checkpoint::default();
-    let (max_sender_count, max_receiver_count) = (1024 * 8, 1024 * 8);
+    let (max_sender_count, max_receiver_count) = (1024 * 4, 1024 * 4);
 
     let mut counter = 0;
     let mut total_items = 0;
@@ -239,24 +247,24 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
             for (offset, content) in shard.iter().enumerate() {
-                let encoded_utxo: Vec<u8> = content.encode();
-                let next_index_beginning_offset =
+                let (utxo, note) = &content;
+                let utxo_index_beginning_offset =
                     current_checkpoint.receiver_index[*shard_index as usize];
                 crate::db::insert_one_shard(
                     pool,
                     *shard_index,
-                    (next_index_beginning_offset + offset) as u64,
-                    encoded_utxo,
+                    (utxo_index_beginning_offset + offset) as u64,
+                    utxo,
+                    note,
                 )
                 .await?;
             }
         }
 
-        // update sender void number into sqlite.
-        let mut stream_vns = tokio_stream::iter(resp.senders.iter().enumerate());
-        while let Some((_, vn)) = stream_vns.next().await {
-            let vn: Vec<u8> = (*vn).into();
-            crate::db::append_void_number(pool, vn).await?;
+        // update sender nullifier commitment into sqlite.
+        let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
+        while let Some((_, nullifier)) = stream_nullifiers.next().await {
+            crate::db::append_nullifier(pool, &nullifier.0, &nullifier.1).await?;
         }
 
         // update total senders and receivers
@@ -290,7 +298,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
 fn increasing_checkpoint(
     checkpoint: &mut Checkpoint,
     incremental_sender: usize,
-    incremental_receiver: &HashMap<u8, Vec<(Utxo, EncryptedNote)>>,
+    incremental_receiver: &HashMap<u8, Vec<(Utxo, FullIncomingNote)>>,
 ) {
     checkpoint.sender_index += incremental_sender;
     incremental_receiver.iter().for_each(|(idx, utxos)| {
@@ -386,7 +394,7 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
 mod tests {
     use super::*;
     use crate::{db, types::*};
-    use codec::Decode;
+    use codec::{Decode, Encode};
     use manta_xt::dolphin_runtime::runtime_types::pallet_manta_pay::types::TransferPost;
     use manta_xt::{dolphin_runtime, utils, MantaConfig};
     use rand::distributions::{Distribution, Uniform};
@@ -404,13 +412,13 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
-        let file =
-            File::open("./tests/integration-tests/precompile-coins/precomputed_mints_v0").unwrap();
+        let file = File::open("./tests/integration-tests/precompile-coins/v1/precomputed_mints_v1")
+            .unwrap();
         let mut buf_reader = BufReader::new(file);
         let mut contents = Vec::new();
         buf_reader.read_to_end(&mut contents).unwrap();
-        let coin_size = 349;
-        let off_set = 2;
+        let coin_size = 552;
+        let off_set = 1;
         let start = off_set;
 
         let seed = "//Alice";
@@ -446,19 +454,19 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
-        let file =
-            File::open("./tests/integration-tests/precompile-coins/precomputed_mints_v0").unwrap();
+        let file = File::open("./tests/integration-tests/precompile-coins/v1/precomputed_mints_v1")
+            .unwrap();
         let mut buf_reader = BufReader::new(file);
         let mut contents = Vec::new();
         buf_reader.read_to_end(&mut contents).unwrap();
-        let coin_size = 349;
-        let off_set = 2;
+        let coin_size = 552;
+        let off_set = 1;
 
         let seed = "//Alice";
         let signer =
             utils::create_signer_from_string::<MantaConfig, manta_xt::sr25519::Pair>(seed).unwrap();
 
-        let batch_size = 4;
+        let batch_size = 10;
         let coin_count = (contents.len() - off_set) / coin_size;
 
         let mut start = off_set;
@@ -555,12 +563,9 @@ mod tests {
                         .manta_pay()
                         .shards(shard_index as u8, i as u64);
                     let shard = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
-                    assert_ne!(shard.0, [0u8; UTXO_LENGTH]);
-                    assert_ne!(
-                        shard.1.ephemeral_public_key,
-                        [0u8; EPHEMERAL_PUBLIC_KEY_LENGTH]
-                    );
-                    assert_ne!(shard.1.ciphertext, [0u8; CIPHER_TEXT_LENGTH]);
+                    let (utxo, note) = shard;
+                    assert_ne!(utxo.encode(), Utxo::default().encode());
+                    assert_ne!(note.encode(), FullIncomingNote::default().encode());
                 }
             }
         }
@@ -580,9 +585,7 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let now = Instant::now();
         let r = pull_all_shards_to_db(&pool, url).await;
-        dbg!(now.elapsed().as_secs_f32());
         assert!(r.is_ok());
     }
 
@@ -608,8 +611,8 @@ mod tests {
     #[ignore]
     async fn bench_pull_shards_from_local_node() {
         let mut i_sum = 0f32;
-        let indexer = "ws://127.0.0.1:7788";
-        let times = 3;
+        let indexer = "ws://127.0.0.1:9800";
+        let times = 1;
         for _i in 0..times {
             i_sum += pull_ledger_diff_from_local_node(indexer).await.unwrap();
         }
@@ -618,7 +621,6 @@ mod tests {
 
     #[tokio::test]
     async fn reconstruct_shards_should_be_correct() {
-        // let url = "wss://ws.rococo.dolphin.engineering:443";
         let config = crate::utils::read_config().unwrap();
         let node = config["indexer"]["configuration"]["full_node"]
             .as_str()
@@ -627,7 +629,7 @@ mod tests {
 
         let mut checkpoint = Checkpoint::default();
         checkpoint.sender_index = 0usize;
-        let (max_sender_count, max_receiver_count) = (1024 * 16, 1024 * 16);
+        let (max_sender_count, max_receiver_count) = (1024 * 6, 1024 * 6);
 
         let resp =
             synchronize_ledger(&client, &checkpoint, max_sender_count, max_receiver_count).await;
@@ -641,23 +643,20 @@ mod tests {
         // check shards randomly for 5 times
         for _ in 0..5 {
             let shard_index_between = Uniform::from(0..=20); // [0, 256)
-            let next_index_between = Uniform::from(0..100);
+            let utxo_index_between = Uniform::from(0..100);
             let mut rng = rand::thread_rng();
             let shard_index = shard_index_between.sample(&mut rng);
-            let next_index = next_index_between.sample(&mut rng);
+            let utxo_index = utxo_index_between.sample(&mut rng);
             let _shard = dolphin_runtime::storage()
                 .manta_pay()
-                .shards(shard_index as u8, next_index as u64);
-            let onchain_utxo = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+                .shards(shard_index as u8, utxo_index as u64);
+            let shard = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+            let (onchain_utxo, onchain_note) = shard;
             let reconstructed_utxo =
-                &shards.get(&shard_index).as_ref().unwrap()[next_index as usize];
+                &shards.get(&shard_index).as_ref().unwrap()[utxo_index as usize];
 
-            assert_eq!(onchain_utxo.0, reconstructed_utxo.0);
-            assert_eq!(
-                onchain_utxo.1.ephemeral_public_key,
-                reconstructed_utxo.1.ephemeral_public_key
-            );
-            assert_eq!(onchain_utxo.1.ciphertext, reconstructed_utxo.1.ciphertext);
+            assert_eq!(onchain_utxo.encode(), reconstructed_utxo.0.encode());
+            assert_eq!(onchain_note.encode(), reconstructed_utxo.1.encode());
         }
     }
 }
