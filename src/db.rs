@@ -426,7 +426,7 @@ mod tests {
         let batched_shards = batched_shards.unwrap();
         assert_eq!(
             batched_shards.len(),
-            (to_utxo_index - from_utxo_index + 1) as usize
+            (to_utxo_index - from_utxo_index) as usize
         );
     }
 
