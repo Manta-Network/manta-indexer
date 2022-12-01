@@ -29,7 +29,7 @@ jobs:
           chmod +x ${{ github.workspace }}/.github/resources/polkadot
       - name: Get manta
         run: |
-          curl -L -o ${{ github.workspace }}/.github/resources/manta https://github.com/Manta-Network/Manta/releases/download/untagged-cbabff7310de83749c69/manta
+          curl -L -o ${{ github.workspace }}/.github/resources/manta https://github.com/Manta-Network/Manta/releases/download/v3.4.3-Dolphin-v3/manta
           chmod +x ${{ github.workspace }}/.github/resources/manta
       - name: Start Relaychain Network with Dolphin
         run: |
@@ -46,7 +46,6 @@ jobs:
               ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
           yarn
           yarn build
-          yarn start ${{ github.workspace }}/.github/resources/dolphin-ci.json
           pm2 start dist/cli.js --name polkadot-launch -- ${{ github.workspace }}/.github/resources/dolphin-ci.json
       - name: Build and Start Indexer 
         run: |
