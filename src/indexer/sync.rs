@@ -261,7 +261,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
             }
         }
 
-        // update sender void number into sqlite.
+        // update sender nullifier into sqlite.
         let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
         while let Some((_, nullifier)) = stream_nullifiers.next().await {
             crate::db::append_nullifier(pool, &nullifier.0, &nullifier.1).await?;

@@ -159,7 +159,7 @@ pub async fn insert_one_nullifier(
     Ok(())
 }
 
-/// Instead of insert with specific idx, just append a new void number record with auto increasing idx primary key.
+/// Instead of insert with specific idx, just append a new nullifier record with auto increasing idx primary key.
 pub async fn append_nullifier(
     pool: &SqlitePool,
     nc: &NullifierCommitment,

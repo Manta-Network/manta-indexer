@@ -22,62 +22,6 @@ pub use pallet_manta_pay::types::{
     SenderChunk, Utxo, UtxoTransparency,
 };
 
-/// Deprecated.
-pub const CIPHER_TEXT_LENGTH: usize = 68;
-/// Deprecated.
-pub const EPHEMERAL_PUBLIC_KEY_LENGTH: usize = 32;
-/// Deprecated.
-pub const UTXO_LENGTH: usize = 32;
-/// Deprecated.
-pub const VOID_NUMBER_LENGTH: usize = 32;
-
-/// Deprecated.
-pub const fn size_of_utxo() -> usize {
-    UTXO_LENGTH
-}
-
-/// Deprecated.
-pub const fn size_of_encrypted_note() -> usize {
-    EPHEMERAL_PUBLIC_KEY_LENGTH + CIPHER_TEXT_LENGTH
-}
-
-/// Deprecated.
-pub const fn size_of_void_number() -> usize {
-    VOID_NUMBER_LENGTH
-}
-
-/// Deprecated.
-pub fn size_of_receiver_chunk(chunk: &ReceiverChunk) -> usize {
-    chunk.len() * (size_of_encrypted_note() + size_of_encrypted_note())
-}
-
-/// Deprecated.
-pub fn size_of_sender_chunk(chunk: &SenderChunk) -> usize {
-    chunk.len() * size_of_void_number()
-}
-
-/// Deprecated.
-pub fn size_of_pull_response(resp: &PullResponse) -> usize {
-    let mut _size = 0;
-    _size += mem::size_of_val(&resp.should_continue);
-    _size += mem::size_of_val(&resp.senders_receivers_total);
-    _size += size_of_sender_chunk(&resp.senders);
-    _size += size_of_receiver_chunk(&resp.receivers);
-
-    _size
-}
-
-/// Deprecated.
-pub fn upper_bound_for_response(payload_size: usize) -> (usize, usize) {
-    let senders_share = size_of_void_number() as f32
-        / (size_of_encrypted_note() + size_of_encrypted_note() + size_of_void_number()) as f32;
-    let receivers_share = 1.0f32 - senders_share;
-
-    let sender_len = senders_share * payload_size as f32 / size_of_void_number() as f32;
-    let receivers_len = receivers_share * payload_size as f32
-        / (size_of_encrypted_note() + size_of_encrypted_note()) as f32;
-    (sender_len as usize, receivers_len as usize)
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RpcMethods {
