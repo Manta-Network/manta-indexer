@@ -651,12 +651,13 @@ mod tests {
             let _shard = dolphin_runtime::storage()
                 .manta_pay()
                 .shards(shard_index as u8, utxo_index as u64);
-            let onchain_utxo = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+            let shard = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+            let (onchain_utxo, onchain_note) = shard;
             let reconstructed_utxo =
                 &shards.get(&shard_index).as_ref().unwrap()[utxo_index as usize];
 
-            assert_eq!(onchain_utxo.0.to_vec(), reconstructed_utxo.0.encode());
-            assert_eq!(onchain_utxo.1.encode(), reconstructed_utxo.1.encode());
+            assert_eq!(onchain_utxo.encode(), reconstructed_utxo.0.encode());
+            assert_eq!(onchain_note.encode(), reconstructed_utxo.1.encode());
         }
     }
 }
