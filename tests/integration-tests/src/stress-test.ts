@@ -1,6 +1,6 @@
 // The main idea is to test the performance of indexer.
 import {ApiPromise} from "@polkadot/api";
-import {dolphinFullNode, dolphinFullNodeLocal, indexerAddress} from "./config.json";
+import {dolphinFullNode, indexerAddress} from "./config.json";
 import createPromiseApi from "./utils";
 import {assert} from "chai";
 import {performance} from "perf_hooks";
@@ -24,7 +24,7 @@ describe("indexer stress test", function () {
         // initial batch of apis as request simulation pool.
         for (let i = 0; i < max_concurrent; ++i) {
             const indexer_api = await createPromiseApi(indexerAddress);
-            const full_node_api = await createPromiseApi(dolphinFullNodeLocal);
+            const full_node_api = await createPromiseApi(dolphinFullNode);
             const health = await indexer_api.rpc.system.health();
             assert.isNotTrue(health.toJSON().isSyncing);
             indexer_apis.push(indexer_api);
