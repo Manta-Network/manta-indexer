@@ -102,7 +102,7 @@ use std::ops::Deref;
 /// OnceStatic is a wrapper for static object initializing with OnceCell Lazy.
 /// It allows an active initialization during the system startup phase.
 /// # Example
-/// ```no_run
+/// ```ignore
 /// // before we have OnceStatic, we can only initial one variable with a closure function.
 /// // but sometime we need to firstly read some configuration and initial them by that.
 /// static x: Config = Lazy::new(|| Default::default());
