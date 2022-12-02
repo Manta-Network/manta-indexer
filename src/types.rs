@@ -15,13 +15,11 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use serde::{Deserialize, Serialize};
-use std::mem;
 
 pub use pallet_manta_pay::types::{
     Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk,
     SenderChunk, Utxo, UtxoTransparency,
 };
-
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RpcMethods {
