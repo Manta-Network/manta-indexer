@@ -60,8 +60,8 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
     Ok(pool)
 }
 
-/// Whether the shard exists in the db or not.
-pub async fn has_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
+/// Whether the sharded item exists in the db or not.
+pub async fn has_item(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
     let n = utxo_index as i64;
 
     let one = sqlx::query("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
@@ -91,22 +91,19 @@ pub async fn get_one_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) 
 }
 
 /// Get a batched shard from db.
-/// [from_utxo_index, to_utxo_index], including the start and the end.
+/// [utxo_index_beginning, utxo_index_ending), including the start, not including the end.
 pub async fn get_batched_shards(
     pool: &SqlitePool,
     shard_index: u8,
-    from_utxo_index: u64,
-    to_utxo_index: u64,
+    utxo_index_beginning: u64,
+    utxo_index_ending: u64,
 ) -> Result<Vec<Shard>> {
-    let from = from_utxo_index as i64;
-    let to = to_utxo_index as i64;
-
     let batched_shard = sqlx::query_as(
-        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index BETWEEN ?2 and ?3;",
+        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index >= ?2 and utxo_index < ?3;",
     )
     .bind(shard_index)
-    .bind(from)
-    .bind(to)
+    .bind(utxo_index_beginning as i64)
+    .bind(utxo_index_ending as i64)
     .fetch_all(pool)
     .await;
 
@@ -149,7 +146,7 @@ pub async fn insert_one_nullifier(
     let mut conn = pool.acquire().await?;
     let mut tx = conn.begin().await?;
     let _row_at = sqlx::query(
-        "INSERT INTO nullifier (idx, nullifier_commitment, outgoing_note) VALUES (?1, ?2, ?3);",
+        "INSERT OR REPLACE INTO nullifier (idx, nullifier_commitment, outgoing_note) VALUES (?1, ?2, ?3);",
     )
     .bind(n)
     .bind(nc.encode())
@@ -162,7 +159,7 @@ pub async fn insert_one_nullifier(
     Ok(())
 }
 
-/// Instead of insert with specific idx, just append a new nullifier commitment record with auto increasing idx primary key.
+/// Instead of insert with specific idx, just append a new nullifier record with auto increasing idx primary key.
 pub async fn append_nullifier(
     pool: &SqlitePool,
     nc: &NullifierCommitment,
@@ -234,7 +231,9 @@ pub async fn get_one_nullifier(
     let nc: NullifierCommitment = one_row
         .get::<Vec<u8>, _>("nullifier_commitment")
         .try_into()
-        .map_err(|_| crate::errors::IndexerError::DecodedError)?;
+        .map_err(|_| {
+            crate::errors::IndexerError::DecodedError("NullifierCommitment".to_string())
+        })?;
 
     let mut _on = one_row.get::<&[u8], _>("outgoing_note");
     let on = <OutgoingNote as Decode>::decode(&mut _on)?;
@@ -242,18 +241,17 @@ pub async fn get_one_nullifier(
     Ok((nc, on))
 }
 
+/// Fetch a batch of nullifier data which index range is [beginning, ending) (without ending).
 pub async fn get_batched_nullifier(
     pool: &SqlitePool,
-    from_nullifier_index: u64,
-    to_nullifier_index: u64,
+    nullifier_beginning: u64,
+    nullifier_ending: u64,
 ) -> Result<SenderChunk> {
-    let from = from_nullifier_index as i64;
-    let to = to_nullifier_index as i64;
     let batched_nullifiers = sqlx::query(
-        "SELECT nullifier_commitment, outgoing_note FROM nullifier WHERE idx BETWEEN ?1 and ?2;",
+        "SELECT nullifier_commitment, outgoing_note FROM nullifier WHERE idx >= ?1 and idx < ?2;",
     )
-    .bind(from)
-    .bind(to)
+    .bind(nullifier_beginning as i64)
+    .bind(nullifier_ending as i64)
     .fetch_all(pool)
     .await?;
     let mut nullifiers = Vec::with_capacity(batched_nullifiers.len());
@@ -261,7 +259,9 @@ pub async fn get_batched_nullifier(
         let nc: NullifierCommitment = i
             .get::<Vec<u8>, _>("nullifier_commitment")
             .try_into()
-            .map_err(|_| crate::errors::IndexerError::DecodedError)?;
+            .map_err(|_| {
+                crate::errors::IndexerError::DecodedError("nullifier_commitment".to_string())
+            })?;
 
         let mut _on = i.get::<&[u8], _>("outgoing_note");
         let on = <OutgoingNote as Decode>::decode(&mut _on)?;
@@ -341,7 +341,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     let pool = initialize_db_pool(&db_path, pool_size).await?;
 
     // if the db is empty, pull utxos.
-    if !has_shard(&pool, 0, 0).await {
+    if !has_item(&pool, 0, 0).await {
         crate::indexer::sync::pull_all_shards_to_db(&pool, node).await?;
     }
 
@@ -351,7 +351,8 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{FullIncomingNote, Shard, UtxoTransparency};
+    use crate::types::{FullIncomingNote, PullResponse, Shard, UtxoTransparency};
+    use codec::Encode;
     use rand::distributions::{Distribution, Uniform};
 
     #[tokio::test]
@@ -379,7 +380,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn has_shard_should_work() {
+    async fn has_item_should_work() {
         let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
@@ -390,12 +391,12 @@ mod tests {
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
         let utxo_index = utxo_index_between.sample(&mut rng);
-        assert!(has_shard(&pool, shard_index, utxo_index).await);
+        assert!(has_item(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
 
         // This shard should not exist.
-        assert!(!has_shard(&pool, shard_index, invalid_utxo_index).await);
+        assert!(!has_item(&pool, shard_index, invalid_utxo_index).await);
     }
 
     #[tokio::test]
@@ -425,7 +426,7 @@ mod tests {
         let batched_shards = batched_shards.unwrap();
         assert_eq!(
             batched_shards.len(),
-            (to_utxo_index - from_utxo_index + 1) as usize
+            (to_utxo_index - from_utxo_index) as usize
         );
     }
 
@@ -592,5 +593,116 @@ mod tests {
     async fn transaction_should_work() {
         // todo, ensure db transaction will work as expected
         assert!(true);
+    }
+
+    #[derive(serde::Serialize, codec::Encode)]
+    struct NewPRV1 {
+        rlen: u64,
+        r: Vec<u8>,
+        slen: u64,
+        s: Vec<u8>,
+    }
+
+    #[derive(serde::Serialize)]
+    struct NewPRV2 {
+        rlen: u64,
+        r: String,
+        slen: u64,
+        s: String,
+    }
+
+    #[test]
+    fn test_the_optimize_of_pull_response_dense() -> Result<()> {
+        let mut x = PullResponse {
+            should_continue: false,
+            receivers: vec![],
+            senders: vec![],
+            senders_receivers_total: 0,
+        };
+
+        let size = 1024 * 8;
+        for _ in 0..size {
+            x.receivers.push((Default::default(), Default::default()));
+            x.senders.push(Default::default());
+        }
+        let timer = std::time::Instant::now();
+        let _d = serde_json::to_string(&x)?;
+        println!("old time = {} ms", timer.elapsed().as_millis());
+
+        let mut y = NewPRV1 {
+            rlen: 0,
+            r: Vec::new(),
+            slen: 0,
+            s: Vec::new(),
+        };
+        for _ in 0..size {
+            y.rlen += 1;
+            y.r.extend_from_slice(&[0u8; 132]);
+            y.slen += 1;
+            y.s.extend_from_slice(&[0u8; 32]);
+        }
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&y)?;
+            println!(
+                "new v1 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
+
+        let mut y = NewPRV2 {
+            rlen: 0,
+            r: String::new(),
+            slen: 0,
+            s: String::new(),
+        };
+        let mut r = Vec::new();
+        let mut s = Vec::new();
+        for _ in 0..size {
+            y.rlen += 1;
+            r.extend_from_slice(&[1u8; 132]);
+            y.slen += 1;
+            s.extend_from_slice(&[1u8; 32]);
+        }
+        y.r = base64::encode(r.as_slice());
+        y.s = base64::encode(s.as_slice());
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&y)?;
+            println!(
+                "new v2 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
+
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&x.encode())?;
+            println!(
+                "new v3 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
+
+        y.r = hex::encode(r.as_slice());
+        y.s = hex::encode(s.as_slice());
+        {
+            let timer = std::time::Instant::now();
+            let _d = serde_json::to_string(&y)?;
+            println!(
+                "new v4 time = {} ms, len = {}, d = {:?}",
+                timer.elapsed().as_millis(),
+                _d.len(),
+                &_d[0..100]
+            );
+        }
+
+        Ok(())
     }
 }

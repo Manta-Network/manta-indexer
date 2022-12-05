@@ -23,8 +23,8 @@ pub use pallet_manta_pay::types::{
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RpcMethods {
-    version: u32,
-    methods: Vec<String>,
+    pub version: u32,
+    pub methods: Vec<String>,
 }
 
 /// Health struct returned by the RPC
@@ -53,4 +53,36 @@ pub struct Shard {
 pub struct Nullifier {
     pub nullifier_commitment: Vec<u8>,
     pub outgoing_note: Vec<u8>,
+}
+
+/// `DensePullResponse` is the dense design of raw `PullResponse`.
+/// The reason for creating it is that raw `PullResponse` always carries a bunch of sender
+/// and receiver chunks, which is quite not friendly for json serde and de-serde.
+/// So with raw format, serialization will generates a large bottleneck.
+/// So we will use `DensePullResponse` as transmission protocol.
+///
+/// Note:
+/// Most of the time(90%+) is spent writing into json strings,
+/// so the key design here is to improve the compression ratio of the chunks string ASAP.
+/// If you want to improve, you can try more effective compression algorithm like `zstd`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DensePullResponse {
+    /// Same with raw `PullResponse`
+    pub sender_receivers_total: u128,
+    /// Total amount of dense `ReceiverChunk`
+    pub receiver_len: usize,
+    /// Compression of dense `ReceiverChunk`
+    pub receivers: String,
+    /// Total amount of dense `SenderChunk`
+    pub sender_len: usize,
+    /// Compression of dense `SenderChunk`
+    pub senders: String,
+    /// Same with raw `PullResponse`
+    pub should_continue: bool,
+    /// Next request checkpoint calculated from server.
+    /// If should_continue = false, this data makes no sense.
+    /// Else, the client can just use this one as next request cursor,
+    /// It avoids complex computing on the client side,
+    /// and the potential risk of inconsistent computing rules between the client and server
+    pub next_checkpoint: Checkpoint,
 }

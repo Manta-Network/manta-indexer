@@ -37,7 +37,7 @@ appenders:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%3f)} {l} {f}:{L} - {m}{n}"
 
 root:
-  level: debug
+  level: warn
   appenders:
     - log_app
 

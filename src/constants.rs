@@ -21,9 +21,6 @@ pub const MANTA_PAY_STORAGE_SHARDS_NAME: [u8; 6] = *b"Shards";
 /// The storage name: NullifierSetInsertionOrder
 pub const MANTA_PAY_STORAGE_NULLIFIER_NAME: [u8; 26] = *b"NullifierSetInsertionOrder";
 
-pub const PULL_MAX_SENDER_UPDATE_SIZE: u64 = 32768;
-pub const PULL_MAX_RECEIVER_UPDATE_SIZE: u64 = 32768;
-
 pub const MEGABYTE: u32 = 1024 * 1024;
 
 pub const PULL_LEDGER_DIFF_METHODS: &str = "mantaPay_pull_ledger_diff";

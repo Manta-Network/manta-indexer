@@ -32,15 +32,50 @@ export const manta_pay_types = {
         receiver_index: '[u64; 256]',
         sender_index: 'u64'
     },
-    EncryptedNote: {
-        ephemeral_public_key: '[u8; 32]',
-        ciphertext: '[u8; 68]'
+    Utxo: {
+        transparency: 'UtxoTransparency',
+        public_asset: 'Asset',
+        commitment: '[u8;32]',
+    },
+    UtxoTransparency: {
+        _enum: ["Transparent", "Opaque"]
+    },
+    Asset: {
+        id: '[u8;32]',
+        value: 'u128',
+    },
+    FullIncomingNote: {
+        address_partition: 'u8',
+        incoming_note: 'IncomingNote',
+        light_incoming_note: 'LightIncomingNote',
+    },
+    IncomingNote: {
+        ephemeral_public_key: '[u8;32]',
+        tag: '[u8;32]',
+        ciphertext: '[[u8;32]; 3]'
+    },
+    LightIncomingNote: {
+        ephemeral_public_key: '[u8;32]',
+        ciphertext: '[[u8;32]; 3]'
     },
     PullResponse: {
         should_continue: 'bool',
-        receivers: 'Vec<([u8; 32], EncryptedNote)>',
-        senders: 'Vec<[u8; 32]>',
+        receivers: 'Vec<(Utxo, FullIncomingNote)>',
+        senders: 'Vec<([u8; 32], OutgoingNote)>',
         senders_receivers_total: 'u128',
+    },
+    OutgoingNote: {
+        ephemeral_public_key: '[u8;32]',
+        ciphertext: '[[u8;32]; 3]'
+    },
+    DensePullResponse: {
+        should_continue: 'bool',
+        receiver_len: 'u64',
+        receivers: 'String',
+        sender_len: 'u64',
+        senders: 'String',
+        senders_receivers_total: 'u128',
+        next_checkpoint: 'Checkpoint',
     }
 };
 
@@ -63,6 +98,24 @@ export const rpc_api = {
                 }
             ],
             type: 'PullResponse'
+        },
+        densely_pull_ledger_diff: {
+            description: 'pull from mantaPay',
+            params: [
+                {
+                    name: 'checkpoint',
+                    type: 'Checkpoint'
+                },
+                {
+                    name: 'max_receiver',
+                    type: 'u64'
+                },
+                {
+                    name: 'max_sender',
+                    type: 'u64'
+                }
+            ],
+            type: 'DensePullResponse'
         }
     }
 }
