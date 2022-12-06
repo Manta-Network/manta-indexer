@@ -15,6 +15,7 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::constants::MEGABYTE;
+use crate::indexer::sync::INIT_SYNCING_FINISHED;
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
 use crate::indexer::{MAX_RECEIVERS, MAX_SENDERS};
 use crate::monitoring::IndexerMiddleware;
@@ -27,6 +28,8 @@ use crate::utils::OnceStatic;
 use anyhow::{bail, Result};
 use frame_support::log::info;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
+use std::sync::atomic::Ordering::SeqCst;
+use std::time::Duration;
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 static RPC_METHODS: OnceStatic<RpcMethods> = OnceStatic::new("RPC_METHODS");
@@ -99,6 +102,31 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .register_method("rpc_methods", move |_, _| Ok(RPC_METHODS.clone()))
         .expect("infallible all other methods have their own address space; qed");
 
+    // start a backend syncing thread.
+    {
+        let ws_client = crate::utils::create_ws_client(full_node).await?;
+        // ensure the full node has this rpc method.
+        crate::utils::is_the_rpc_methods_existed(&ws_client, rpc_method)
+            .await
+            .map_err(|_| crate::errors::IndexerError::RpcMethodNotExists)?;
+        crate::indexer::sync::start_sync_ledger_job(
+            ws_client,
+            db_pool,
+            (MAX_RECEIVERS, MAX_SENDERS),
+            frequency,
+        );
+        while !INIT_SYNCING_FINISHED.load(SeqCst) {
+            info!(target: "indexer", "still wait for initialized syncing finished...");
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    }
+
+    // start monitoring service.
+    {
+        let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
+        prometheus_exporter::start(prometheus_addr.parse()?)?;
+    }
+
     let srv_addr = format!("127.0.0.1:{port}");
     let server = WsServerBuilder::new()
         .max_connections(srv_config.max_connections)
@@ -109,26 +137,5 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .set_middleware(IndexerMiddleware::default())
         .build(srv_addr)
         .await?;
-
-    // start to sync utxo
-    let ws_client = crate::utils::create_ws_client(full_node).await?;
-    // ensure the full node has this rpc method.
-    crate::utils::is_the_rpc_methods_existed(&ws_client, rpc_method)
-        .await
-        .map_err(|_| crate::errors::IndexerError::RpcMethodNotExists)?;
-
-    let _addr = server.local_addr()?;
-    let handle = server.start(module)?;
-
-    crate::indexer::sync::start_sync_ledger_job(
-        &ws_client,
-        db_pool,
-        (MAX_RECEIVERS, MAX_SENDERS),
-        frequency,
-    )
-    .await?;
-
-    let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
-    prometheus_exporter::start(prometheus_addr.parse()?)?;
-    Ok(handle)
+    Ok(server.start(module)?)
 }

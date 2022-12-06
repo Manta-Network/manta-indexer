@@ -49,13 +49,14 @@ sqlx = { version = "0.6.2", features = ["sqlite", "runtime-tokio-rustls", "macro
 tokio = { version = "1.21", features = ["rt", "macros", "sync", "rt-multi-thread"] }
 tokio-stream = "0.1.11"
 toml = "0.5"
+base64 = "0.13"
 
 [dev-dependencies]
 criterion = "0.4.0"
 manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git", branch = "v4.0.0" }
 rand = "0.8.5"
 tempfile = "3.3.0"
-base64 = "0.13"
+
 
 [[bench]]
 name = "db_bench"

@@ -16,6 +16,7 @@
 
 ///! Sync shards from full node.
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
+use crate::monitoring::indexer_ledger_opts;
 use crate::types::{Checkpoint, FullIncomingNote, PullResponse, Utxo};
 use anyhow::Result;
 use frame_support::log::{error, info};
@@ -28,10 +29,15 @@ use manta_pay::{
     manta_parameters::{self, Get},
     manta_util::codec::Decode as _,
 };
+use once_cell::sync::Lazy;
+use prometheus::{register_int_counter, IntCounter};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
 use std::time::Duration;
 use std::time::Instant;
+use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
 /// sync ledger diff from remote full node using the checkpoint as "beginning point".
@@ -148,6 +154,7 @@ pub async fn sync_shards_from_full_node(
 
         // should_continue == true means the synchronization is done.
         if !resp.should_continue {
+            INIT_SYNCING_FINISHED.store(true, SeqCst);
             break;
         }
         current_checkpoint = next_checkpoint;
@@ -156,21 +163,49 @@ pub async fn sync_shards_from_full_node(
     Ok(())
 }
 
-pub async fn start_sync_ledger_job(
-    ws_client: &WsClient,
+// When we start a indexer, we need to make sure the initialization syncing from full node
+// is finished at least once before the service begins, so here's a disposable switch to indicate this scenario.
+// Before we start the service to public, we check this variable and wait it becoming true.
+// It will be set true once inner syncing loop found initialization done.
+pub(crate) static INIT_SYNCING_FINISHED: AtomicBool = AtomicBool::new(false);
+static SYNC_ERROR_COUNTER: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(indexer_ledger_opts(
+        "sync_error_count",
+        "syncing error counter"
+    ))
+    .expect("sync_error_count alloc fail")
+});
+
+pub fn start_sync_ledger_job(
+    ws_client: WsClient,
     pool: SqlitePool,
     max_count: (u64, u64),
     frequency: u64,
-) -> Result<()> {
-    let mut synced_times = 0u32;
-    loop {
-        // todo, add error to log
-        sync_shards_from_full_node(ws_client, &pool, (max_count.0, max_count.1)).await?;
-        synced_times += 1;
-        info!("synced utxo for {} times.", synced_times);
-        // every frequency, start to sync shards from full node.
-        tokio::time::sleep(Duration::from_secs(frequency)).await;
-    }
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut synced_times = 0u32;
+        loop {
+            match sync_shards_from_full_node(&ws_client, &pool, (max_count.0, max_count.1)).await {
+                Ok(_) => {
+                    synced_times += 1;
+                    info!(
+                        target: "indexer",
+                        "synced utxo for {} times.",
+                        synced_times
+                    );
+                    tokio::time::sleep(Duration::from_secs(frequency)).await;
+                }
+                Err(e) => {
+                    error!(
+                        target: "indexer",
+                        "backend syncing job with err: {:?}",
+                        e
+                    );
+                    SYNC_ERROR_COUNTER.inc();
+                }
+            }
+        }
+    })
 }
 
 #[cfg(test)]
@@ -527,15 +562,12 @@ mod tests {
             .as_integer()
             .unwrap() as u64;
         let duplicated_pool = pool.clone();
-        let handler = tokio::spawn(async move {
-            let _ = start_sync_ledger_job(
-                &client,
-                duplicated_pool,
-                (max_sender_count, max_receiver_count),
-                frequency,
-            )
-            .await;
-        });
+        let handler = start_sync_ledger_job(
+            client,
+            duplicated_pool,
+            (max_sender_count, max_receiver_count),
+            frequency,
+        );
         let last_check_point = db::get_latest_check_point(&pool).await.unwrap();
         let last_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
 

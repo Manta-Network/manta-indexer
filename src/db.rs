@@ -179,6 +179,7 @@ pub async fn append_nullifier(
 }
 
 pub async fn get_len_of_nullifier(pool: &SqlitePool) -> Result<usize> {
+    // TODO. deal with hole.
     Ok(sqlx::query(r#"SELECT count(*) as count FROM nullifier;"#)
         .fetch_one(pool)
         .await?
@@ -191,6 +192,7 @@ pub async fn get_latest_check_point(pool: &SqlitePool) -> Result<Checkpoint> {
     let mut stream = tokio_stream::iter(0..=255u8);
     // If there's no any shard in db, return default checkpoint.
     while let Some(shard_index) = stream.next().await {
+        // TODO deal with hole.
         let count_of_utxo: (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM shards WHERE shard_index = ?;")
                 .bind(shard_index)
