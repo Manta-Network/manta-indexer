@@ -122,7 +122,7 @@ pub async fn insert_one_shard(
     let mut conn = pool.acquire().await?;
     let mut tx = conn.begin().await?;
     let _row_at =
-        sqlx::query("INSERT INTO shards (shard_index, utxo_index, utxo, full_incoming_note) VALUES (?1, ?2, ?3, ?4);")
+        sqlx::query("INSERT OR REPLACE INTO shards (shard_index, utxo_index, utxo, full_incoming_note) VALUES (?1, ?2, ?3, ?4);")
             .bind(shard_index)
             .bind(n)
             .bind(utxo.encode())
@@ -344,7 +344,8 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 
     // if the db is empty, pull utxos.
     if !has_item(&pool, 0, 0).await {
-        crate::indexer::sync::pull_all_shards_to_db(&pool, node).await?;
+        let ws_client = crate::utils::create_ws_client(node).await?;
+        crate::indexer::sync::sync_shards_from_full_node(&ws_client, &pool, (1024, 1024)).await?;
     }
 
     Ok(pool)

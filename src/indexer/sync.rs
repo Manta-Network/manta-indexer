@@ -20,7 +20,7 @@ use crate::monitoring::indexer_ledger_opts;
 use crate::types::{Checkpoint, FullIncomingNote, PullResponse, Utxo};
 use crate::utils::SHUTDOWN_FLAG;
 use anyhow::Result;
-use frame_support::log::{error, info};
+use frame_support::log::{debug, error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
@@ -38,6 +38,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::time::Duration;
 use std::time::Instant;
+use sqlx::Acquire;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
@@ -91,7 +92,6 @@ pub async fn reconstruct_shards_from_pull_response(
 3. In current synchronization, if `should_continue` == true, accumlate shards to current checkpoint,
    then send next shard request until `should_continue` == false.
 4. Save every new shards to each corresponding shard index, and nullifier commitment.
-5.
 */
 pub async fn sync_shards_from_full_node(
     ws_client: &WsClient,
@@ -101,6 +101,9 @@ pub async fn sync_shards_from_full_node(
     let mut current_checkpoint = crate::db::get_latest_check_point(pool).await?;
     let (max_sender_count, max_receiver_count) = max_count;
 
+    let mut counter = 0;
+    let mut total_items = 0;
+    let mut now = Instant::now();
     let mut next_checkpoint = current_checkpoint;
     loop {
         let resp = synchronize_ledger(
@@ -115,29 +118,25 @@ pub async fn sync_shards_from_full_node(
         // update shards
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
-            for (utxo_index, sh) in shard.iter().enumerate() {
-                let offset = current_checkpoint.receiver_index[*shard_index as usize] as u64;
-                if !crate::db::has_item(pool, *shard_index, utxo_index as u64 + offset).await {
-                    let (utxo, note) = &sh;
-                    crate::db::insert_one_shard(
-                        pool,
-                        *shard_index,
-                        utxo_index as u64 + offset,
-                        utxo,
-                        note,
-                    )
+            for (offset, content) in shard.iter().enumerate() {
+                let (utxo, note) = &content;
+                let utxo_index_beginning_offset =
+                    current_checkpoint.receiver_index[*shard_index as usize];
+                crate::db::insert_one_shard(
+                    pool,
+                    *shard_index,
+                    (utxo_index_beginning_offset + offset) as u64,
+                    utxo,
+                    note,
+                )
                     .await?;
-                }
             }
         }
 
         // update nullifier
         let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
-        let nullifier_checkpoint = crate::db::get_len_of_nullifier(pool).await?;
-        while let Some((idx, nullifier)) = stream_nullifiers.next().await {
-            // let nullifier: Vec<u8> = (*_nullifier).into();
-            let i = idx + nullifier_checkpoint;
-            crate::db::insert_one_nullifier(pool, i as u64, &nullifier.0, &nullifier.1).await?;
+        while let Some((_, nullifier)) = stream_nullifiers.next().await {
+            crate::db::append_nullifier(pool, &nullifier.0, &nullifier.1).await?;
         }
 
         // update total senders and receivers
@@ -145,20 +144,27 @@ pub async fn sync_shards_from_full_node(
         crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
 
         // update next check point
-        super::pull::calculate_next_checkpoint(
-            &shards,
-            &current_checkpoint,
-            &mut next_checkpoint,
-            resp.senders.len(),
-        )
-        .await;
+        increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
+        total_items += resp.receivers.len() + resp.senders.len();
+        let time = now.elapsed().as_millis();
+        now = Instant::now();
+        debug!(
+            target: "indexer",
+            "sync new loop({}): fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
+            counter,
+            resp.receivers.len(),
+            total_items,
+            resp.senders_receivers_total,
+            time
+        );
+
 
         // should_continue == true means the synchronization is done.
         if !resp.should_continue {
             INIT_SYNCING_FINISHED.store(true, SeqCst);
             break;
         }
-        current_checkpoint = next_checkpoint;
+        counter += 1;
     }
 
     Ok(())
@@ -255,85 +261,6 @@ pub async fn get_check_point_from_node(ws: &str) -> Result<Checkpoint> {
     }
 
     Ok(next_checkpoint)
-}
-
-pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
-    let client = crate::utils::create_ws_client(ws).await?;
-
-    let mut current_checkpoint = Checkpoint::default();
-    let (max_sender_count, max_receiver_count) = (1024, 1024);
-
-    let mut counter = 0;
-    let mut total_items = 0;
-    let mut now = Instant::now();
-    loop {
-        let resp = synchronize_ledger(
-            &client,
-            &current_checkpoint,
-            max_sender_count,
-            max_receiver_count,
-        )
-        .await?;
-        if resp.senders.len() != resp.receivers.len() {
-            error!(
-                target: "indexer",
-                "pull ledger diff sender len({}) != receiver len({}), ckpt = {:?}",
-                resp.senders.len(),
-                resp.receivers.len(),
-                current_checkpoint
-            );
-        }
-
-        let shards = reconstruct_shards_from_pull_response(&resp).await?;
-
-        // update receiver shards into sqlite.
-        let mut stream_shards = tokio_stream::iter(shards.iter());
-        while let Some((shard_index, shard)) = stream_shards.next().await {
-            for (offset, content) in shard.iter().enumerate() {
-                let (utxo, note) = &content;
-                let utxo_index_beginning_offset =
-                    current_checkpoint.receiver_index[*shard_index as usize];
-                crate::db::insert_one_shard(
-                    pool,
-                    *shard_index,
-                    (utxo_index_beginning_offset + offset) as u64,
-                    utxo,
-                    note,
-                )
-                .await?;
-            }
-        }
-
-        // update sender nullifier into sqlite.
-        let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
-        while let Some((_, nullifier)) = stream_nullifiers.next().await {
-            crate::db::append_nullifier(pool, &nullifier.0, &nullifier.1).await?;
-        }
-
-        // update total senders and receivers
-        let new_total = resp.senders_receivers_total as i64;
-        crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
-
-        // update next check point
-        increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
-        total_items += resp.receivers.len() + resp.senders.len();
-        let time = now.elapsed().as_millis();
-        now = Instant::now();
-        info!(
-            target: "indexer",
-            "sync new loop({}): fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
-            counter,
-            resp.receivers.len(),
-            total_items,
-            resp.senders_receivers_total,
-            time
-        );
-        if !resp.should_continue {
-            break;
-        }
-        counter += 1;
-    }
-    Ok(())
 }
 
 /// According to the incremental `pull_ledger_diff` receiver and sender value,
@@ -614,21 +541,6 @@ mod tests {
         assert_eq!(count as i64, count_of_new_utxo);
         assert!(count >= 1);
         handler.abort();
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn quickly_pull_shards_from_full_node() {
-        let url = "ws://127.0.0.1:9800";
-        let db_path = "tmp.db";
-        let pool_size = 16u32;
-        let pool = db::initialize_db_pool(db_path, pool_size).await;
-        assert!(pool.is_ok());
-
-        let pool = pool.unwrap();
-
-        let r = pull_all_shards_to_db(&pool, url).await;
-        assert!(r.is_ok());
     }
 
     #[tokio::test]

@@ -51,6 +51,7 @@ tokio-stream = "0.1.11"
 toml = "0.5"
 base64 = "0.13"
 signal-hook = "0.3.14"
+lru = "0.8.1"
 
 [dev-dependencies]
 criterion = "0.4.0"

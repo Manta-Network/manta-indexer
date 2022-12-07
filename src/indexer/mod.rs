@@ -24,6 +24,7 @@ use sqlx::sqlite::SqlitePool;
 
 pub mod pull;
 pub mod sync;
+mod cache;
 
 pub const MAX_SENDERS: u64 = 1024 * 4;
 pub const MAX_RECEIVERS: u64 = 1024 * 4;
