@@ -18,20 +18,35 @@
 
 use anyhow::Result;
 use frame_support::log::info;
+use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
+use std::sync::atomic::Ordering::SeqCst;
+use std::time::Duration;
 
 pub use manta_indexer::errors::*;
+use manta_indexer::utils::SHUTDOWN_FLAG;
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() -> Result<()> {
     // initialize logger
-    // utils::init_logger();
     log4rs::init_file("conf/log.yaml", Default::default())?;
 
-    let _handler = manta_indexer::service::start_service().await?;
+    // used for graceful shutdown, each async task should hold a sender,
+    // and drop the sender when it receive a shutdown signal and finish its loop.
+    // then receiver will return a error means all sender are dropped, which means
+    // all async task exit successfully, then we exit the main process.
+    let (s, mut r) = tokio::sync::mpsc::channel::<()>(1);
+    signal_hook::flag::register(SIGINT, SHUTDOWN_FLAG.clone())?;
+    signal_hook::flag::register(SIGTERM, SHUTDOWN_FLAG.clone())?;
+    signal_hook::flag::register(SIGQUIT, SHUTDOWN_FLAG.clone())?;
+
+    let handler = manta_indexer::service::start_service(s).await?;
     info!(target: "indexer", "indexer has been started successfully!");
-    // todo, shutdown server gracefully.
-    // if ctr + c {
-    //     handler.stop().await?;
-    // }
-    futures::future::pending().await
+
+    while !SHUTDOWN_FLAG.load(SeqCst) {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+    handler.stop()?.await;
+    let _ = r.recv().await;
+    info!(target: "indexer", "indexer has receive ctrl+c and finish graceful exit, bye");
+    Ok(())
 }

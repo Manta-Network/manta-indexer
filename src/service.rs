@@ -30,11 +30,12 @@ use frame_support::log::info;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
 use std::sync::atomic::Ordering::SeqCst;
 use std::time::Duration;
+use tokio::sync::mpsc::Sender;
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 static RPC_METHODS: OnceStatic<RpcMethods> = OnceStatic::new("RPC_METHODS");
 
-pub async fn start_service() -> Result<WsServerHandle> {
+pub async fn start_service(graceful_register: Sender<()>) -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
 
     let config = crate::utils::read_config()?;
@@ -114,6 +115,7 @@ pub async fn start_service() -> Result<WsServerHandle> {
             db_pool,
             (MAX_RECEIVERS, MAX_SENDERS),
             frequency,
+            Some(graceful_register.clone()),
         );
         while !INIT_SYNCING_FINISHED.load(SeqCst) {
             info!(target: "indexer", "still wait for initialized syncing finished...");

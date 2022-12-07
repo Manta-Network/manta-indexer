@@ -18,6 +18,7 @@
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
 use crate::monitoring::indexer_ledger_opts;
 use crate::types::{Checkpoint, FullIncomingNote, PullResponse, Utxo};
+use crate::utils::SHUTDOWN_FLAG;
 use anyhow::Result;
 use frame_support::log::{error, info};
 use jsonrpsee::core::client::ClientT;
@@ -181,6 +182,7 @@ pub fn start_sync_ledger_job(
     pool: SqlitePool,
     max_count: (u64, u64),
     frequency: u64,
+    graceful_register: Option<tokio::sync::mpsc::Sender<()>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut synced_times = 0u32;
@@ -206,7 +208,11 @@ pub fn start_sync_ledger_job(
                     SYNC_ERROR_COUNTER.inc();
                 }
             }
+            if SHUTDOWN_FLAG.load(SeqCst) {
+                break;
+            }
         }
+        drop(graceful_register);
     })
 }
 
@@ -569,6 +575,7 @@ mod tests {
             duplicated_pool,
             (max_sender_count, max_receiver_count),
             frequency,
+            None,
         );
         let last_check_point = db::get_latest_check_point(&pool).await.unwrap();
         let last_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
