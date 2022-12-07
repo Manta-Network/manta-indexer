@@ -33,12 +33,12 @@ use manta_pay::{
 use once_cell::sync::Lazy;
 use prometheus::{register_int_counter, IntCounter};
 use sqlx::sqlite::SqlitePool;
+use sqlx::Acquire;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
 use std::time::Duration;
 use std::time::Instant;
-use sqlx::Acquire;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
@@ -104,16 +104,19 @@ pub async fn sync_shards_from_full_node(
     let mut counter = 0;
     let mut total_items = 0;
     let mut now = Instant::now();
-    let mut next_checkpoint = current_checkpoint;
     loop {
         let resp = synchronize_ledger(
             ws_client,
-            &next_checkpoint,
+            &current_checkpoint,
             max_sender_count,
             max_receiver_count,
         )
         .await?;
         let shards = reconstruct_shards_from_pull_response(&resp).await?;
+
+        // combine 3 updates into a transaction.
+        let mut conn = pool.acquire().await?;
+        let mut transaction_handler = conn.begin().await?;
 
         // update shards
         let mut stream_shards = tokio_stream::iter(shards.iter());
@@ -123,25 +126,28 @@ pub async fn sync_shards_from_full_node(
                 let utxo_index_beginning_offset =
                     current_checkpoint.receiver_index[*shard_index as usize];
                 crate::db::insert_one_shard(
-                    pool,
+                    &mut transaction_handler,
                     *shard_index,
                     (utxo_index_beginning_offset + offset) as u64,
                     utxo,
                     note,
                 )
-                    .await?;
+                .await?;
             }
         }
 
         // update nullifier
         let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
         while let Some((_, nullifier)) = stream_nullifiers.next().await {
-            crate::db::append_nullifier(pool, &nullifier.0, &nullifier.1).await?;
+            crate::db::append_nullifier(&mut transaction_handler, &nullifier.0, &nullifier.1)
+                .await?;
         }
 
         // update total senders and receivers
         let new_total = resp.senders_receivers_total as i64;
-        crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
+        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, new_total).await?;
+
+        transaction_handler.commit().await?;
 
         // update next check point
         increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
@@ -157,7 +163,6 @@ pub async fn sync_shards_from_full_node(
             resp.senders_receivers_total,
             time
         );
-
 
         // should_continue == true means the synchronization is done.
         if !resp.should_continue {
