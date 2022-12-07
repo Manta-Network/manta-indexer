@@ -167,10 +167,13 @@ where
     Ok(())
 }
 
-pub async fn get_len_of_nullifier(pool: &SqlitePool) -> Result<usize> {
+pub async fn get_len_of_nullifier<'a, E>(executor: E) -> Result<usize>
+where
+    E: sqlx::sqlite::SqliteExecutor<'a>,
+{
     // TODO. deal with hole.
     Ok(sqlx::query(r#"SELECT count(*) as count FROM nullifier;"#)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?
         .get::<u32, _>("count") as usize)
 }
@@ -319,7 +322,8 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     // if the db is empty, pull utxos.
     if !has_item(&pool, 0, 0).await {
         let ws_client = crate::utils::create_ws_client(node).await?;
-        crate::indexer::sync::sync_shards_from_full_node(&ws_client, &pool, (1024, 1024)).await?;
+        crate::indexer::sync::sync_shards_from_full_node(&ws_client, &pool, (1024, 1024), false)
+            .await?;
     }
 
     Ok(pool)

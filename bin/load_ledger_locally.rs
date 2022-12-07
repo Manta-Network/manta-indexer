@@ -44,6 +44,7 @@ async fn main() -> Result<()> {
         &ws_client,
         &pool,
         (1024 * 4, 1024 * 4),
+        false,
     )
     .await?;
     pool.close().await;

@@ -16,10 +16,12 @@
 
 ///! Sync shards from full node.
 use crate::constants::PULL_LEDGER_DIFF_METHODS;
+use crate::indexer::cache::{put_batch_receiver, put_batch_sender};
 use crate::monitoring::indexer_ledger_opts;
 use crate::types::{Checkpoint, FullIncomingNote, PullResponse, Utxo};
 use crate::utils::SHUTDOWN_FLAG;
 use anyhow::Result;
+use codec::Encode;
 use frame_support::log::{debug, error, info};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -97,6 +99,7 @@ pub async fn sync_shards_from_full_node(
     ws_client: &WsClient,
     pool: &SqlitePool,
     max_count: (u64, u64),
+    refresh_cache: bool,
 ) -> Result<()> {
     let mut current_checkpoint = crate::db::get_latest_check_point(pool).await?;
     let (max_sender_count, max_receiver_count) = max_count;
@@ -121,10 +124,10 @@ pub async fn sync_shards_from_full_node(
         // update shards
         let mut stream_shards = tokio_stream::iter(shards.iter());
         while let Some((shard_index, shard)) = stream_shards.next().await {
+            let utxo_index_beginning_offset =
+                current_checkpoint.receiver_index[*shard_index as usize];
             for (offset, content) in shard.iter().enumerate() {
                 let (utxo, note) = &content;
-                let utxo_index_beginning_offset =
-                    current_checkpoint.receiver_index[*shard_index as usize];
                 crate::db::insert_one_shard(
                     &mut transaction_handler,
                     *shard_index,
@@ -137,19 +140,49 @@ pub async fn sync_shards_from_full_node(
         }
 
         // update nullifier
+        let nullifier_checkpoint =
+            crate::db::get_len_of_nullifier(&mut transaction_handler).await?;
         let mut stream_nullifiers = tokio_stream::iter(resp.senders.iter().enumerate());
-        while let Some((_, nullifier)) = stream_nullifiers.next().await {
-            crate::db::append_nullifier(&mut transaction_handler, &nullifier.0, &nullifier.1)
-                .await?;
+        while let Some((idx, nullifier)) = stream_nullifiers.next().await {
+            let i = idx + nullifier_checkpoint;
+            crate::db::insert_one_nullifier(
+                &mut transaction_handler,
+                i as u64,
+                &nullifier.0,
+                &nullifier.1,
+            )
+            .await?;
         }
 
         // update total senders and receivers
         let new_total = resp.senders_receivers_total as i64;
-        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, new_total).await?;
+        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, new_total)
+            .await?;
 
         transaction_handler.commit().await?;
 
-        // update next check point
+        // update lru cache
+        // ATTENTION: we should update cache only if we make sure the transaction has been committed successfully.
+        if refresh_cache {
+            // update receiver
+            for (shard_index, items) in shards.iter() {
+                let utxo_index_beginning_offset =
+                    current_checkpoint.receiver_index[*shard_index as usize];
+                let mut batch_receiver = Vec::with_capacity(items.len());
+                for (offset, content) in items.iter().enumerate() {
+                    batch_receiver.push((utxo_index_beginning_offset + offset, content.encode()));
+                }
+                put_batch_receiver(*shard_index, batch_receiver).await;
+            }
+            // update sender
+            let mut batch_sender = Vec::with_capacity(resp.senders.len());
+            for (idx, nullifier) in resp.senders.iter().enumerate() {
+                batch_sender.push((nullifier_checkpoint + idx, nullifier.encode()));
+            }
+            put_batch_sender(batch_sender).await;
+        }
+
+        // update next checkpoint
         increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
         total_items += resp.receivers.len() + resp.senders.len();
         let time = now.elapsed().as_millis();
@@ -198,7 +231,9 @@ pub fn start_sync_ledger_job(
     tokio::spawn(async move {
         let mut synced_times = 0u32;
         loop {
-            match sync_shards_from_full_node(&ws_client, &pool, (max_count.0, max_count.1)).await {
+            match sync_shards_from_full_node(&ws_client, &pool, (max_count.0, max_count.1), true)
+                .await
+            {
                 Ok(_) => {
                     synced_times += 1;
                     if synced_times % 100 == 0 {

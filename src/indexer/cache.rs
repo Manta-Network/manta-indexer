@@ -90,7 +90,7 @@ async fn get_batch_lru(keys: Vec<LruKeyType>) -> Vec<Option<Vec<u8>>> {
     let mut result = Vec::with_capacity(keys.len());
     let mut cache = LEDGER_LRU.lock().await;
     keys.into_iter()
-        .for_each(|key| result.push(cache.get(&key).map(|r#ref| r#ref.clone())));
+        .for_each(|key| result.push(cache.get(&key).cloned()));
     result
 }
 
