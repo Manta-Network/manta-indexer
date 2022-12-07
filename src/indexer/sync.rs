@@ -502,6 +502,138 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn private_transfer_should_work() {
+        let config = crate::utils::read_config().unwrap();
+        let port = config["indexer"]["configuration"]["port"]
+            .as_integer()
+            .unwrap();
+        let indexer_address = format!("ws://127.0.0.1:{port}");
+        let api = utils::create_manta_client::<MantaConfig>(&indexer_address)
+            .await
+            .expect("Failed to create client.");
+
+        let file =
+            File::open("./tests/integration-tests/precompile-coins/v1/precomputed_transfers_v1")
+                .unwrap();
+        let mut buf_reader = BufReader::new(file);
+        let mut contents = Vec::new();
+        buf_reader.read_to_end(&mut contents).unwrap();
+        let to_private_coin_size = 552;
+        let private_transfer_coin_size = 1290;
+        let off_set = 1;
+        let mut start = off_set;
+
+        let seed = "//Alice";
+        let signer =
+            utils::create_signer_from_string::<MantaConfig, manta_xt::sr25519::Pair>(seed).unwrap();
+
+        // send two to_private extrinsics
+        let private_transfer_inpunt_size = 2;
+        let mut batch_extrinsics = vec![];
+        for _ in 0..private_transfer_inpunt_size {
+            let mut to_private_coin = &contents[start..start + to_private_coin_size];
+            let mint = dolphin_runtime::runtime_types::pallet_manta_pay::pallet::Call::to_private {
+                post: TransferPost::decode(&mut to_private_coin).unwrap(),
+            };
+            let mint_call = dolphin_runtime::runtime_types::dolphin_runtime::Call::MantaPay(mint);
+            batch_extrinsics.push(mint_call);
+            start += to_private_coin_size;
+        }
+        let batched_extrinsic = dolphin_runtime::tx().utility().batch(batch_extrinsics);
+        let _ = api
+            .tx()
+            .sign_and_submit_then_watch_default(&batched_extrinsic, &signer)
+            .await
+            .unwrap()
+            .wait_for_finalized() // for utxo syncing, we only query finalized chain state.
+            .await
+            .unwrap();
+
+        // send private transfer extrinsic
+        let mut private_transfer_coin = &contents[start..start + private_transfer_coin_size];
+        let private_transfer = dolphin_runtime::tx()
+            .manta_pay()
+            .private_transfer(TransferPost::decode(&mut private_transfer_coin).unwrap());
+        let block = api
+            .tx()
+            .sign_and_submit_then_watch_default(&private_transfer, &signer)
+            .await
+            .unwrap()
+            .wait_for_finalized() // for utxo syncing, we only query finalized chain state.
+            .await
+            .unwrap();
+        let block_hash = block.block_hash();
+        let _events = block.fetch_events().await.unwrap();
+        println!("private transfer extrinsic submitted: {}", block_hash);
+    }
+
+    #[tokio::test]
+    async fn reclaim_should_work() {
+        let config = crate::utils::read_config().unwrap();
+        let port = config["indexer"]["configuration"]["port"]
+            .as_integer()
+            .unwrap();
+        let indexer_address = format!("ws://127.0.0.1:{port}");
+        let api = utils::create_manta_client::<MantaConfig>(&indexer_address)
+            .await
+            .expect("Failed to create client.");
+
+        let file =
+            File::open("./tests/integration-tests/precompile-coins/v1/precomputed_reclaims_v1")
+                .unwrap();
+        let mut buf_reader = BufReader::new(file);
+        let mut contents = Vec::new();
+        buf_reader.read_to_end(&mut contents).unwrap();
+        let to_private_coin_size = 552;
+        let reclaim_coin_size = 968;
+        let off_set = 1;
+        let mut start = off_set;
+
+        let seed = "//Alice";
+        let signer =
+            utils::create_signer_from_string::<MantaConfig, manta_xt::sr25519::Pair>(seed).unwrap();
+
+        // send two to_private extrinsics
+        let private_transfer_inpunt_size = 2;
+        let mut batch_extrinsics = vec![];
+        for _ in 0..private_transfer_inpunt_size {
+            let mut to_private_coin = &contents[start..start + to_private_coin_size];
+            let mint = dolphin_runtime::runtime_types::pallet_manta_pay::pallet::Call::to_private {
+                post: TransferPost::decode(&mut to_private_coin).unwrap(),
+            };
+            let mint_call = dolphin_runtime::runtime_types::dolphin_runtime::Call::MantaPay(mint);
+            batch_extrinsics.push(mint_call);
+            start += to_private_coin_size;
+        }
+        let batched_extrinsic = dolphin_runtime::tx().utility().batch(batch_extrinsics);
+        let _ = api
+            .tx()
+            .sign_and_submit_then_watch_default(&batched_extrinsic, &signer)
+            .await
+            .unwrap()
+            .wait_for_finalized() // for utxo syncing, we only query finalized chain state.
+            .await
+            .unwrap();
+
+        // send reclaim extrinsic
+        let mut reclaim_coin = &contents[start..start + reclaim_coin_size];
+        let reclaim = dolphin_runtime::tx()
+            .manta_pay()
+            .to_public(TransferPost::decode(&mut reclaim_coin).unwrap());
+        let block = api
+            .tx()
+            .sign_and_submit_then_watch_default(&reclaim, &signer)
+            .await
+            .unwrap()
+            .wait_for_finalized() // for utxo syncing, we only query finalized chain state.
+            .await
+            .unwrap();
+        let block_hash = block.block_hash();
+        let _events = block.fetch_events().await.unwrap();
+        println!("reclaim extrinsic submitted: {}", block_hash);
+    }
+
+    #[tokio::test]
     async fn incremental_synchronization_should_work() {
         // sync shards from node for the first time
         let pool = crate::db::create_test_db_or_first_pull(true).await;
