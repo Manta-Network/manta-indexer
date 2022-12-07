@@ -188,11 +188,13 @@ pub fn start_sync_ledger_job(
             match sync_shards_from_full_node(&ws_client, &pool, (max_count.0, max_count.1)).await {
                 Ok(_) => {
                     synced_times += 1;
-                    info!(
-                        target: "indexer",
-                        "synced utxo for {} times.",
-                        synced_times
-                    );
+                    if synced_times % 100 == 0 {
+                        info!(
+                            target: "indexer",
+                            "synced utxo for {} times.",
+                            synced_times
+                        );
+                    }
                     tokio::time::sleep(Duration::from_secs(frequency)).await;
                 }
                 Err(e) => {

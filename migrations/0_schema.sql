@@ -22,8 +22,6 @@ CREATE TABLE IF NOT EXISTS "nullifier"
     outgoing_note        BLOB NOT NULL
 );
 
-UPDATE SQLITE_SEQUENCE SET seq = 0 WHERE name = 'nullifier';
-
 -- create the total of senders and receivers table
 CREATE TABLE IF NOT EXISTS "senders_receivers_total"
 (
