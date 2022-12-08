@@ -18,6 +18,7 @@
 
 use lru::LruCache;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use tokio::sync::Mutex;
 
@@ -52,10 +53,63 @@ pub(crate) fn sender_key(idx: LruKeyType) -> LruKeyType {
         | (idx & VALUE_MASK)
 }
 
+struct ShardThreadSafeLru {
+    shard_num: usize,
+    maps: Vec<Mutex<LruCache<LruKeyType, Vec<u8>>>>,
+}
+
+impl ShardThreadSafeLru {
+    async fn batch_get(&self, keys: Vec<LruKeyType>) -> Vec<Option<Vec<u8>>> {
+        let mut result = std::iter::repeat(None)
+            .take(keys.len())
+            .collect::<Vec<Option<Vec<u8>>>>();
+        let mut shard_keys = HashMap::new();
+        for (idx, key) in keys.into_iter().enumerate() {
+            let shard_id = key as usize % self.shard_num;
+            shard_keys
+                .entry(shard_id)
+                .or_insert(vec![])
+                .push((idx, key));
+        }
+        for (shard, keys) in shard_keys {
+            let mut cache = self.maps[shard].lock().await;
+            for key in keys {
+                result[key.0] = cache.get(&key.1).cloned();
+            }
+        }
+        result
+    }
+
+    async fn batch_put(&self, v: Vec<(LruKeyType, Vec<u8>)>) {
+        let mut shard_vs = HashMap::new();
+        for (k, v) in v {
+            let shard_id = k as usize % self.shard_num;
+            shard_vs.entry(shard_id).or_insert(vec![]).push((k, v));
+        }
+        for (shard, vs) in shard_vs {
+            let mut cache = self.maps[shard].lock().await;
+            for (k, v) in vs {
+                cache.put(k, v);
+            }
+        }
+    }
+}
+
 /// Used for cache receiver and sender ledger data.
 /// Storage data is parity codec format Vec<u8> for simplify.
 pub(crate) static LEDGER_LRU: Lazy<Mutex<LruCache<LruKeyType, Vec<u8>>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(1024 * 1024 * 16).unwrap())));
+
+static LEDGER_LRU2: Lazy<ShardThreadSafeLru> = Lazy::new(|| {
+    let shard_num = 32;
+    let mut maps = Vec::with_capacity(32);
+    for _ in 0..shard_num {
+        maps.push(Mutex::new(LruCache::new(
+            NonZeroUsize::new(512 * 1024).unwrap(),
+        )));
+    }
+    ShardThreadSafeLru { shard_num, maps }
+});
 
 pub(crate) async fn get_receiver(shard_idx: u8, utxo_idx: usize) -> Option<Vec<u8>> {
     let key = receiver_key(shard_idx as LruKeyType, utxo_idx as LruKeyType);
@@ -87,11 +141,13 @@ pub(crate) async fn get_batch_sender(sender_idxs: &Vec<usize>) -> Vec<Option<Vec
 }
 
 async fn get_batch_lru(keys: Vec<LruKeyType>) -> Vec<Option<Vec<u8>>> {
-    let mut result = Vec::with_capacity(keys.len());
-    let mut cache = LEDGER_LRU.lock().await;
-    keys.into_iter()
-        .for_each(|key| result.push(cache.get(&key).cloned()));
-    result
+    LEDGER_LRU2.batch_get(keys).await
+
+    // let mut result = Vec::with_capacity(keys.len());
+    // let mut cache = LEDGER_LRU.lock().await;
+    // keys.into_iter()
+    //     .for_each(|key| result.push(cache.get(&key).cloned()));
+    // result
 }
 
 pub(crate) async fn put_receiver(shard_idx: u8, utxo_idx: usize, r: Vec<u8>) {
@@ -124,10 +180,16 @@ pub(crate) async fn put_batch_sender(s: Vec<(usize, Vec<u8>)>) {
 }
 
 async fn put_batch_lru(v: Vec<(LruKeyType, Vec<u8>)>) {
+    LEDGER_LRU2.batch_put(v).await
+    // let mut cache = LEDGER_LRU.lock().await;
+    // v.into_iter().for_each(|(k, v)| {
+    //     cache.put(k, v);
+    // });
+}
+
+pub(crate) async fn lru_size() -> usize {
     let mut cache = LEDGER_LRU.lock().await;
-    v.into_iter().for_each(|(k, v)| {
-        cache.put(k, v);
-    });
+    cache.len()
 }
 
 #[cfg(test)]
