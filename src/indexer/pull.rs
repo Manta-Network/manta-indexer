@@ -14,11 +14,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::indexer::cache::{
+    get_batch_sender, get_batch_shard_receiver, put_batch_receiver, put_batch_sender,
+};
 use crate::types::{Checkpoint, FullIncomingNote, PullResponse, ReceiverChunk, SenderChunk, Utxo};
 use anyhow::Result;
-use codec::Decode;
+use codec::{Decode, Encode};
 use frame_support::log::{debug, trace};
 use manta_pay::config::utxo::v3::MerkleTreeConfiguration;
+use pallet_manta_pay::types::{NullifierCommitment, OutgoingNote};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
@@ -99,9 +103,24 @@ pub async fn pull_receivers_for_shard(
         "query shard index: {}, and receiver_index: {}, {}",
         shard_index, receiver_index, max_receiver_index
     );
-    let shards =
-        crate::db::get_batched_shards(pool, shard_index, receiver_index as u64, max_receiver_index)
-            .await?;
+    let all_indices = (receiver_index..max_receiver_index as usize).collect::<Vec<usize>>();
+
+    // step1. check cached hot data.
+    let cached = get_batch_shard_receiver(shard_index, &all_indices).await;
+    let mut query_db_indices = vec![];
+    for (offset, v) in cached.into_iter().enumerate() {
+        if let Some(v) = v {
+            receivers.push(<(Utxo, FullIncomingNote) as Decode>::decode(
+                &mut v.as_slice(),
+            )?);
+        } else {
+            query_db_indices.push(all_indices[offset] as i64)
+        }
+    }
+
+    // step2. query db for cache missing data.
+    let shards = crate::db::get_batched_shards_by_idxs(pool, shard_index, query_db_indices).await?;
+    let mut write_back = vec![];
 
     let mut stream_shards = tokio_stream::iter(shards.iter());
     while let Some(shard) = stream_shards.next().await {
@@ -111,7 +130,14 @@ pub async fn pull_receivers_for_shard(
             <Utxo as Decode>::decode(&mut utxo)?,
             <FullIncomingNote as Decode>::decode(&mut full_incoming_note)?,
         ));
+        write_back.push((
+            shard.utxo_index as usize,
+            (utxo, full_incoming_note).encode(),
+        ));
     }
+
+    // step3. write back to cache.
+    put_batch_receiver(shard_index, write_back).await;
 
     // TODO if some hole exists in utxo_index, this logic gonna be error.
     Ok(shards.len() == amount as usize
@@ -126,17 +152,50 @@ pub async fn pull_receivers_for_shard(
 pub async fn pull_senders(
     pool: &SqlitePool,
     sender_index: u64,
-    max_update: u64,
+    amount: u64,
 ) -> Result<(bool, u64, SenderChunk)> {
+    let mut senders = vec![];
+    let all_indices = (sender_index..(sender_index + amount))
+        .map(|v| v as usize)
+        .collect::<Vec<usize>>();
+    // step1. check cached hot data.
+    let cached = get_batch_sender(&all_indices).await;
+    let mut query_db_indices = vec![];
+    for (offset, v) in cached.into_iter().enumerate() {
+        if let Some(v) = v {
+            senders.push(<(NullifierCommitment, OutgoingNote) as Decode>::decode(
+                &mut v.as_slice(),
+            )?);
+        } else {
+            query_db_indices.push(all_indices[offset] as i64)
+        }
+    }
+
+    // step2. query db for cache missing data.
+    let nullifiers = crate::db::get_batched_nullifier_by_idxs(pool, query_db_indices).await?;
+    let mut write_back = vec![];
+
+    let mut stream_shards = tokio_stream::iter(nullifiers.iter());
+    while let Some(nullifier) = stream_shards.next().await {
+        let mut nullifier_commitment = nullifier.nullifier_commitment.as_slice();
+        let mut outgoing_note = nullifier.outgoing_note.as_slice();
+        senders.push((
+            <NullifierCommitment as Decode>::decode(&mut nullifier_commitment)?,
+            <OutgoingNote as Decode>::decode(&mut outgoing_note)?,
+        ));
+        write_back.push((
+            nullifier.idx as usize,
+            (nullifier_commitment, outgoing_note).encode(),
+        ));
+    }
+
+    // step3. write back to cache.
+    put_batch_sender(write_back).await;
+
     Ok((
-        crate::db::has_nullifier(pool, sender_index as u64 + max_update).await,
-        sender_index + max_update,
-        crate::db::get_batched_nullifier(
-            pool,
-            sender_index as u64,
-            (sender_index + max_update) as u64,
-        )
-        .await?,
+        crate::db::has_nullifier(pool, sender_index as u64 + amount).await,
+        sender_index + amount,
+        senders,
     ))
 }
 

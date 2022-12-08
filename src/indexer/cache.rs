@@ -69,19 +69,19 @@ pub(crate) async fn get_sender(sender_index: usize) -> Option<Vec<u8>> {
 
 pub(crate) async fn get_batch_shard_receiver(
     shard_idx: u8,
-    utxo_idxs: Vec<usize>,
+    utxo_idxs: &Vec<usize>,
 ) -> Vec<Option<Vec<u8>>> {
     let mut keys = Vec::with_capacity(utxo_idxs.len());
-    for idx in utxo_idxs.into_iter() {
-        keys.push(receiver_key(shard_idx as LruKeyType, idx as LruKeyType));
+    for idx in utxo_idxs {
+        keys.push(receiver_key(shard_idx as LruKeyType, *idx as LruKeyType));
     }
     get_batch_lru(keys).await
 }
 
-pub(crate) async fn get_batch_sender(sender_idxs: Vec<usize>) -> Vec<Option<Vec<u8>>> {
+pub(crate) async fn get_batch_sender(sender_idxs: &Vec<usize>) -> Vec<Option<Vec<u8>>> {
     let mut keys = Vec::with_capacity(sender_idxs.len());
     for idx in sender_idxs.into_iter() {
-        keys.push(sender_key(idx as LruKeyType));
+        keys.push(sender_key(*idx as LruKeyType));
     }
     get_batch_lru(keys).await
 }

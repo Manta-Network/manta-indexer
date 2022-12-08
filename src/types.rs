@@ -51,6 +51,7 @@ pub struct Shard {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Nullifier {
+    pub idx: i64,
     pub nullifier_commitment: Vec<u8>,
     pub outgoing_note: Vec<u8>,
 }

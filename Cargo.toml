@@ -58,6 +58,7 @@ criterion = "0.4.0"
 manta-xt = { git = "https://github.com/Manta-Network/manta-xt.git", branch = "v4.0.0" }
 rand = "0.8.5"
 tempfile = "3.3.0"
+simple_logger = "4.0"
 
 
 [[bench]]
