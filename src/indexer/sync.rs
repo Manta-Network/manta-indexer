@@ -104,7 +104,6 @@ pub async fn sync_shards_from_full_node(
     let mut current_checkpoint = crate::db::get_latest_check_point(pool).await?;
     let (max_sender_count, max_receiver_count) = max_count;
 
-    let mut counter = 0;
     let mut total_items = 0;
     let mut now = Instant::now();
     loop {
@@ -189,8 +188,7 @@ pub async fn sync_shards_from_full_node(
         now = Instant::now();
         debug!(
             target: "indexer",
-            "sync new loop({}): fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
-            counter,
+            "sync new loop, fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
             resp.receivers.len(),
             total_items,
             resp.senders_receivers_total,
@@ -202,7 +200,6 @@ pub async fn sync_shards_from_full_node(
             INIT_SYNCING_FINISHED.store(true, SeqCst);
             break;
         }
-        counter += 1;
     }
 
     Ok(())
@@ -404,6 +401,7 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::indexer::cache::get_batch_shard_receiver;
     use crate::{db, types::*};
     use codec::{Decode, Encode};
     use manta_xt::dolphin_runtime::runtime_types::pallet_manta_pay::types::TransferPost;
@@ -652,5 +650,19 @@ mod tests {
             assert_eq!(onchain_utxo.encode(), reconstructed_utxo.0.encode());
             assert_eq!(onchain_note.encode(), reconstructed_utxo.1.encode());
         }
+    }
+
+    #[tokio::test]
+    async fn incremental_synchronization_should_update_cache() -> Result<()> {
+        let pool = crate::db::create_test_db_or_first_pull(true).await;
+        assert!(pool.is_ok());
+        let pool = pool.unwrap();
+
+        let indices: Vec<usize> = vec![1, 4, 7, 23, 32, 35, 39, 50, 88, 93];
+        let rs = get_batch_shard_receiver(0, &indices).await;
+        for r in rs {
+            assert!(r.is_some());
+        }
+        Ok(())
     }
 }

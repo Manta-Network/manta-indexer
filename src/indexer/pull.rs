@@ -106,6 +106,7 @@ pub async fn pull_receivers_for_shard(
     let all_indices = (receiver_index..max_receiver_index as usize).collect::<Vec<usize>>();
 
     // step1. check cached hot data.
+    let mut cached_values = 0;
     let cached = get_batch_shard_receiver(shard_index, &all_indices).await;
     let mut query_db_indices = vec![];
     for (offset, v) in cached.into_iter().enumerate() {
@@ -113,6 +114,7 @@ pub async fn pull_receivers_for_shard(
             receivers.push(<(Utxo, FullIncomingNote) as Decode>::decode(
                 &mut v.as_slice(),
             )?);
+            cached_values += 1;
         } else {
             query_db_indices.push(all_indices[offset] as i64)
         }
@@ -126,21 +128,19 @@ pub async fn pull_receivers_for_shard(
     while let Some(shard) = stream_shards.next().await {
         let mut utxo = shard.utxo.as_slice();
         let mut full_incoming_note = shard.full_incoming_note.as_slice();
-        receivers.push((
+        let receiver = (
             <Utxo as Decode>::decode(&mut utxo)?,
             <FullIncomingNote as Decode>::decode(&mut full_incoming_note)?,
-        ));
-        write_back.push((
-            shard.utxo_index as usize,
-            (utxo, full_incoming_note).encode(),
-        ));
+        );
+        write_back.push((shard.utxo_index as usize, receiver.encode()));
+        receivers.push(receiver);
     }
 
     // step3. write back to cache.
     put_batch_receiver(shard_index, write_back).await;
 
     // TODO if some hole exists in utxo_index, this logic gonna be error.
-    Ok(shards.len() == amount as usize
+    Ok(shards.len() + cached_values as usize == amount as usize
         && crate::db::has_item(pool, shard_index, max_receiver_index).await)
 }
 
@@ -179,14 +179,12 @@ pub async fn pull_senders(
     while let Some(nullifier) = stream_shards.next().await {
         let mut nullifier_commitment = nullifier.nullifier_commitment.as_slice();
         let mut outgoing_note = nullifier.outgoing_note.as_slice();
-        senders.push((
+        let sender = (
             <NullifierCommitment as Decode>::decode(&mut nullifier_commitment)?,
             <OutgoingNote as Decode>::decode(&mut outgoing_note)?,
-        ));
-        write_back.push((
-            nullifier.idx as usize,
-            (nullifier_commitment, outgoing_note).encode(),
-        ));
+        );
+        write_back.push((nullifier.idx as usize, sender.encode()));
+        senders.push(sender);
     }
 
     // step3. write back to cache.

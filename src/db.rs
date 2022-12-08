@@ -366,7 +366,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     // if the db is empty, pull utxos.
     if !has_item(&pool, 0, 0).await {
         let ws_client = crate::utils::create_ws_client(node).await?;
-        crate::indexer::sync::sync_shards_from_full_node(&ws_client, &pool, (1024, 1024), false)
+        crate::indexer::sync::sync_shards_from_full_node(&ws_client, &pool, (1024, 1024), true)
             .await?;
     }
 
