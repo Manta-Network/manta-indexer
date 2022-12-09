@@ -18,7 +18,7 @@ use crate::types::{Checkpoint, FullIncomingNote, PullResponse, ReceiverChunk, Se
 use anyhow::Result;
 use codec::Decode;
 use frame_support::log::{debug, trace};
-use manta_pay::config::utxo::v3::MerkleTreeConfiguration;
+use manta_pay::config::utxo::MerkleTreeConfiguration;
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
@@ -156,7 +156,7 @@ pub async fn pull_ledger_diff(
         pull_receivers(pool, *checkpoint.receiver_index, max_receivers).await?;
     let (more_senders, next_sender_index, senders) =
         pull_senders(pool, checkpoint.sender_index as u64, max_senders).await?;
-    let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await? as u128;
+    let senders_receivers_total = crate::db::get_total_senders_receivers(pool).await?;
     Ok((
         PullResponse {
             should_continue: more_receivers || more_senders,

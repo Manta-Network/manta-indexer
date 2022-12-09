@@ -24,7 +24,7 @@ use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::{
-    config::utxo::v3::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
+    config::utxo::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
     manta_parameters::{self, Get},
     manta_util::codec::Decode as _,
 };
@@ -134,8 +134,8 @@ pub async fn sync_shards_from_full_node(
         }
 
         // update total senders and receivers
-        let new_total = resp.senders_receivers_total as i64;
-        crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
+        let new_total = resp.senders_receivers_total;
+        crate::db::update_or_insert_total_senders_receivers(pool, &new_total).await?;
 
         // update next check point
         super::pull::calculate_next_checkpoint(
@@ -203,7 +203,7 @@ pub async fn get_check_point_from_node(ws: &str) -> Result<Checkpoint> {
             "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
             next_checkpoint,
             resp.senders.len(),
-            resp.senders_receivers_total
+            u128::from_le_bytes(resp.senders_receivers_total)
         );
         if !resp.should_continue {
             break;
@@ -268,8 +268,8 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
         }
 
         // update total senders and receivers
-        let new_total = resp.senders_receivers_total as i64;
-        crate::db::update_or_insert_total_senders_receivers(pool, new_total).await?;
+        let new_total = resp.senders_receivers_total;
+        crate::db::update_or_insert_total_senders_receivers(pool, &new_total).await?;
 
         // update next check point
         increasing_checkpoint(&mut current_checkpoint, resp.senders.len(), &shards);
@@ -282,7 +282,7 @@ pub async fn pull_all_shards_to_db(pool: &SqlitePool, ws: &str) -> Result<()> {
             counter,
             resp.receivers.len(),
             total_items,
-            resp.senders_receivers_total,
+            u128::from_le_bytes(resp.senders_receivers_total),
             time
         );
         if !resp.should_continue {
@@ -338,7 +338,7 @@ pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
             "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
             next_checkpoint,
             resp.senders.len(),
-            resp.senders_receivers_total
+            u128::from_le_bytes(resp.senders_receivers_total)
         );
         if !resp.should_continue {
             break;
@@ -548,7 +548,8 @@ mod tests {
         let current_check_point = db::get_latest_check_point(&pool).await.unwrap();
 
         let current_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
-        let count_of_new_utxo = current_senders_receivers_total - last_senders_receivers_total;
+        let count_of_new_utxo = u128::from_le_bytes(current_senders_receivers_total)
+            - u128::from_le_bytes(last_senders_receivers_total);
         let mut count = 0;
         for (shard_index, (last, current)) in last_check_point
             .receiver_index
@@ -570,7 +571,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(count as i64, count_of_new_utxo);
+        assert_eq!(count as u128, count_of_new_utxo);
         assert!(count >= 1);
         handler.abort();
     }
