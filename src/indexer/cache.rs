@@ -100,6 +100,9 @@ impl ShardThreadSafeLru {
 pub(crate) static LEDGER_LRU: Lazy<Mutex<LruCache<LruKeyType, Vec<u8>>>> =
     Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(1024 * 1024 * 16).unwrap())));
 
+/// A sharded lru cache for better concurrency.
+/// When the data size grows bigger, consider use this(not for now).
+/// If data size is not so big, the single shard cache performance is better.
 static LEDGER_LRU2: Lazy<ShardThreadSafeLru> = Lazy::new(|| {
     let shard_num = 32;
     let mut maps = Vec::with_capacity(32);
@@ -141,13 +144,11 @@ pub(crate) async fn get_batch_sender(sender_idxs: &Vec<usize>) -> Vec<Option<Vec
 }
 
 async fn get_batch_lru(keys: Vec<LruKeyType>) -> Vec<Option<Vec<u8>>> {
-    LEDGER_LRU2.batch_get(keys).await
-
-    // let mut result = Vec::with_capacity(keys.len());
-    // let mut cache = LEDGER_LRU.lock().await;
-    // keys.into_iter()
-    //     .for_each(|key| result.push(cache.get(&key).cloned()));
-    // result
+    let mut result = Vec::with_capacity(keys.len());
+    let mut cache = LEDGER_LRU.lock().await;
+    keys.into_iter()
+        .for_each(|key| result.push(cache.get(&key).cloned()));
+    result
 }
 
 pub(crate) async fn put_receiver(shard_idx: u8, utxo_idx: usize, r: Vec<u8>) {
@@ -180,11 +181,10 @@ pub(crate) async fn put_batch_sender(s: Vec<(usize, Vec<u8>)>) {
 }
 
 async fn put_batch_lru(v: Vec<(LruKeyType, Vec<u8>)>) {
-    LEDGER_LRU2.batch_put(v).await
-    // let mut cache = LEDGER_LRU.lock().await;
-    // v.into_iter().for_each(|(k, v)| {
-    //     cache.put(k, v);
-    // });
+    let mut cache = LEDGER_LRU.lock().await;
+    v.into_iter().for_each(|(k, v)| {
+        cache.put(k, v);
+    });
 }
 
 pub(crate) async fn lru_size() -> usize {

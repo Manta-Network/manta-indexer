@@ -62,7 +62,7 @@ pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePo
 }
 
 /// Whether the sharded item exists in the db or not.
-pub async fn has_item(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
+pub async fn has_shard(pool: &SqlitePool, shard_index: u8, utxo_index: u64) -> bool {
     let n = utxo_index as i64;
 
     let one = sqlx::query("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index = ?2;")
@@ -117,6 +117,9 @@ pub async fn get_batched_shards_by_idxs<'a, E>(
 where
     E: sqlx::sqlite::SqliteExecutor<'a>,
 {
+    if utxos_idxs.is_empty() {
+        return Ok(vec![]);
+    }
     let params = (1..=utxos_idxs.len())
         .map(|i| format!("?{}", i + 1))
         .collect::<Vec<String>>()
@@ -296,6 +299,9 @@ pub async fn get_batched_nullifier_by_idxs<'a, E>(
 where
     E: sqlx::sqlite::SqliteExecutor<'a>,
 {
+    if indices.is_empty() {
+        return Ok(vec![]);
+    }
     let params = (1..=indices.len())
         .map(|i| format!("?{}", i))
         .collect::<Vec<String>>()
@@ -364,7 +370,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     let pool = initialize_db_pool(&db_path, pool_size).await?;
 
     // if the db is empty, pull utxos.
-    if !has_item(&pool, 0, 0).await {
+    if !has_shard(&pool, 0, 0).await {
         let ws_client = crate::utils::create_ws_client(node).await?;
         crate::indexer::sync::sync_shards_from_full_node(&ws_client, &pool, (1024, 1024), true)
             .await?;
@@ -417,12 +423,12 @@ mod tests {
         let mut rng = rand::thread_rng();
         let shard_index = shard_index_between.sample(&mut rng);
         let utxo_index = utxo_index_between.sample(&mut rng);
-        assert!(has_item(&pool, shard_index, utxo_index).await);
+        assert!(has_shard(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
 
         // This shard should not exist.
-        assert!(!has_item(&pool, shard_index, invalid_utxo_index).await);
+        assert!(!has_shard(&pool, shard_index, invalid_utxo_index).await);
     }
 
     #[tokio::test]

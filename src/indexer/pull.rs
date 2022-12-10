@@ -26,6 +26,7 @@ use pallet_manta_pay::types::{NullifierCommitment, OutgoingNote};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
+use crate::db::has_shard;
 
 /// Calculate the next checkpoint.
 pub async fn calculate_next_checkpoint(
@@ -64,6 +65,14 @@ pub async fn pull_receivers(
     let mut remain = max_amount;
 
     for (shard_index, utxo_index) in receiver_indices.into_iter().enumerate() {
+        // Unlike sender query, receiver query has a tricky thing:
+        // In a initialization looping, the front shard should be traversed first second request,
+        // and never visited in this init loop, so for the following request,
+        // we need to just skip invalid pull_for_shard for those shards.
+        if !has_shard(&pool, shard_index as u8, utxo_index as u64).await {
+            continue;
+        }
+
         debug!(
             "query shard index: {}, and utxo_index: {}",
             shard_index, utxo_index
