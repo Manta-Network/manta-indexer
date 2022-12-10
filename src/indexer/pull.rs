@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
+use crate::db::has_shard;
 use crate::indexer::cache::{
     get_batch_sender, get_batch_shard_receiver, put_batch_receiver, put_batch_sender,
 };
@@ -26,7 +27,6 @@ use pallet_manta_pay::types::{NullifierCommitment, OutgoingNote};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
-use crate::db::has_shard;
 
 /// Calculate the next checkpoint.
 pub async fn calculate_next_checkpoint(
