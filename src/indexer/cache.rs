@@ -137,7 +137,7 @@ pub(crate) async fn get_batch_shard_receiver(
 
 pub(crate) async fn get_batch_sender(sender_idxs: &Vec<usize>) -> Vec<Option<Vec<u8>>> {
     let mut keys = Vec::with_capacity(sender_idxs.len());
-    for idx in sender_idxs.into_iter() {
+    for idx in sender_idxs.iter() {
         keys.push(sender_key(*idx as LruKeyType));
     }
     get_batch_lru(keys).await
@@ -188,7 +188,7 @@ async fn put_batch_lru(v: Vec<(LruKeyType, Vec<u8>)>) {
 }
 
 pub(crate) async fn lru_size() -> usize {
-    let mut cache = LEDGER_LRU.lock().await;
+    let cache = LEDGER_LRU.lock().await;
     cache.len()
 }
 

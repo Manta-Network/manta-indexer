@@ -656,7 +656,6 @@ mod tests {
     async fn incremental_synchronization_should_update_cache() -> Result<()> {
         let pool = crate::db::create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
-        let pool = pool.unwrap();
 
         let indices: Vec<usize> = vec![1, 4, 7, 23, 32, 35, 39, 50, 88, 93];
         let rs = get_batch_shard_receiver(0, &indices).await;

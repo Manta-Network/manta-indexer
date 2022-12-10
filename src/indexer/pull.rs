@@ -69,7 +69,7 @@ pub async fn pull_receivers(
         // In a initialization looping, the front shard should be traversed first second request,
         // and never visited in this init loop, so for the following request,
         // we need to just skip invalid pull_for_shard for those shards.
-        if !has_shard(&pool, shard_index as u8, utxo_index as u64).await {
+        if !has_shard(pool, shard_index as u8, utxo_index as u64).await {
             continue;
         }
 
@@ -150,7 +150,7 @@ pub async fn pull_receivers_for_shard(
 
     // TODO if some hole exists in utxo_index, this logic gonna be error.
     Ok(shards.len() + cached_values as usize == amount as usize
-        && crate::db::has_item(pool, shard_index, max_receiver_index).await)
+        && crate::db::has_shard(pool, shard_index, max_receiver_index).await)
 }
 
 /// pull senders from local sqlite with given checkpoint indices position.
