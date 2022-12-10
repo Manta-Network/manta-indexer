@@ -9,10 +9,10 @@ import {TypeRegistry, Metadata} from "@polkadot/types";
 import {BN} from "@polkadot/util";
 
 describe("indexer stress test", function () {
-    const max_concurrent = 5;
+    const max_concurrent = 3;
     const receiver_shard_num = 256;
-    const max_receiver_num = 1024;
-    const max_sender_num = 1024;
+    const max_receiver_num = 1024 * 4;
+    const max_sender_num = 1024 * 4;
     const duration_sec_each_test_case = 60;
 
     let indexer_apis: Array<ApiPromise>;
@@ -32,7 +32,7 @@ describe("indexer stress test", function () {
         }
     });
 
-    it("baseline stress test", async function () {
+    it.skip("baseline stress test", async function () {
         const total_receivers = 40000;
         const total_senders = 40000;
 
@@ -88,7 +88,7 @@ describe("indexer stress test", function () {
         console.log("baseline stress test finish %d loop, qps = %d, avg = %d ms, p99 = %d ms", count, qps, avg_latency, p99_latency)
     })
 
-    it("optimized dense stress test", async function () {
+    it.only("optimized dense stress test", async function () {
         const total_receivers = 5000000;
         const total_senders = 5000000;
 
