@@ -403,6 +403,8 @@ mod tests {
     use std::io::prelude::*;
     use std::io::BufReader;
 
+    #[tokio::test]
+    #[ignore]
     async fn mint_one_coin() {
         let config = crate::utils::read_config().unwrap();
         let port = config["indexer"]["configuration"]["port"]
@@ -443,8 +445,6 @@ mod tests {
         println!("mint extrinsic submitted: {}", block_hash);
     }
 
-    #[tokio::test]
-    #[ignore]
     async fn mint_private_coins() {
         let config = crate::utils::read_config().unwrap();
         let port = config["indexer"]["configuration"]["port"]
@@ -455,6 +455,7 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
+        // this file contains 10 to_private extrinsics
         let file = File::open("./tests/integration-tests/precompile-coins/v1/precomputed_mints_v1")
             .unwrap();
         let mut buf_reader = BufReader::new(file);
@@ -467,7 +468,7 @@ mod tests {
         let signer =
             utils::create_signer_from_string::<MantaConfig, manta_xt::sr25519::Pair>(seed).unwrap();
 
-        let batch_size = 10;
+        let batch_size = 5;
         let coin_count = (contents.len() - off_set) / coin_size;
 
         let mut start = off_set;
@@ -540,7 +541,7 @@ mod tests {
         let last_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
 
         // mint one coin
-        mint_one_coin().await;
+        mint_private_coins().await;
 
         // sleep 2 * frequency more seconds.
         tokio::time::sleep(Duration::from_secs(frequency * 2)).await;

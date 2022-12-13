@@ -57,6 +57,16 @@ jobs:
           cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn block-production
+      - name: Initialize Assets
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn initialize-assets
+      - name: Initialize UTXOs
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn mint
       - name: Run Relayer Integration Test
         run: |
           cd ${{ github.workspace }}/tests/integration-tests

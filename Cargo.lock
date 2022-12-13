@@ -2729,7 +2729,7 @@ dependencies = [
 [[package]]
 name = "manta-xt"
 version = "4.0.0"
-source = "git+https://github.com/Manta-Network/manta-xt.git?branch=v4.0.0#29df5caf68a7d10c4439f3d4c6c587419683b90c"
+source = "git+https://github.com/Manta-Network/manta-xt.git?branch=v4.0.0#7efbbf393f2bd381707e486d64f9bad7e3137b26"
 dependencies = [
  "anyhow",
  "hex",
