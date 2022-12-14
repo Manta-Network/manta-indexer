@@ -372,11 +372,8 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..50);
-        let mut rng = rand::thread_rng();
-        let shard_index = shard_index_between.sample(&mut rng);
-        let utxo_index = utxo_index_between.sample(&mut rng);
+        let shard_index = 206u8;
+        let utxo_index = 1;
         let one_shard = get_one_shard(&pool, shard_index, utxo_index).await;
 
         assert!(one_shard.is_ok());
@@ -390,11 +387,8 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..50);
-        let mut rng = rand::thread_rng();
-        let shard_index = shard_index_between.sample(&mut rng);
-        let utxo_index = utxo_index_between.sample(&mut rng);
+        let shard_index = 206u8;
+        let utxo_index = 1;
         assert!(has_item(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
@@ -410,17 +404,15 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..50);
+        let shard_index = 206u8;
+        let utxo_index_between = Uniform::from(0..2);
         let mut rng = rand::thread_rng();
-        let shard_index = shard_index_between.sample(&mut rng);
         let mut from_utxo_index = utxo_index_between.sample(&mut rng);
         let mut to_utxo_index = utxo_index_between.sample(&mut rng);
 
         if to_utxo_index < from_utxo_index {
             std::mem::swap(&mut to_utxo_index, &mut from_utxo_index);
         }
-        assert!(to_utxo_index > from_utxo_index);
 
         let batched_shards =
             get_batched_shards(&pool, shard_index, from_utxo_index, to_utxo_index).await;

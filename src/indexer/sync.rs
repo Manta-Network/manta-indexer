@@ -398,7 +398,6 @@ mod tests {
     use codec::{Decode, Encode};
     use manta_xt::dolphin_runtime::runtime_types::pallet_manta_pay::types::TransferPost;
     use manta_xt::{dolphin_runtime, utils, MantaConfig};
-    use rand::distributions::{Distribution, Uniform};
     use std::fs::File;
     use std::io::prelude::*;
     use std::io::BufReader;
@@ -538,9 +537,9 @@ mod tests {
             .await;
         });
         let last_check_point = db::get_latest_check_point(&pool).await.unwrap();
-        let last_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
 
-        // mint one coin
+        // send 10 to_private extrinsics, 10 UTXOs should be generated.
+        let expected_10_new_utxos = 10;
         mint_private_coins().await;
 
         // sleep 2 * frequency more seconds.
@@ -548,9 +547,6 @@ mod tests {
 
         let current_check_point = db::get_latest_check_point(&pool).await.unwrap();
 
-        let current_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
-        let count_of_new_utxo = u128::from_le_bytes(current_senders_receivers_total)
-            - u128::from_le_bytes(last_senders_receivers_total);
         let mut count = 0;
         for (shard_index, (last, current)) in last_check_point
             .receiver_index
@@ -572,7 +568,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(count as u128, count_of_new_utxo);
+        assert_eq!(count as u128, expected_10_new_utxos);
         assert!(count >= 1);
         handler.abort();
     }
@@ -643,13 +639,18 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
+        let shard_idxs = [
+            (206u8, 0u64),
+            (206u8, 1u64),
+            (173u8, 0u64),
+            (222u8, 1u64),
+            (89u8, 0u64),
+        ];
+
         // check shards randomly for 5 times
-        for _ in 0..5 {
-            let shard_index_between = Uniform::from(0..=20); // [0, 256)
-            let utxo_index_between = Uniform::from(0..100);
-            let mut rng = rand::thread_rng();
-            let shard_index = shard_index_between.sample(&mut rng);
-            let utxo_index = utxo_index_between.sample(&mut rng);
+        for i in 0..5usize {
+            let shard_index = shard_idxs[i].0;
+            let utxo_index = shard_idxs[i].1;
             let _shard = dolphin_runtime::storage()
                 .manta_pay()
                 .shards(shard_index as u8, utxo_index as u64);

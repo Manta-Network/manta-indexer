@@ -12,10 +12,10 @@ async function main() {
 
   const offSet = 1;
   const coinSize = 552; // each coin size is 552.
-  const coinsCount = 10;
+  const coinsCount = 40;
   // send 5 mint private transactions for each batch.
   const batchSize = 5;
-  // this file contains 10 to_private extrinsics to initialize UTXOs for next testing
+  // this file contains 40 to_private extrinsics to initialize UTXOs for next testing
   const content = await readFile("precompile-coins/v1/initialize-utxo");
   const buffer = content.subarray(
     offSet + 0 * batchSize * coinSize,
