@@ -24,7 +24,7 @@ use crate::relayer::{
     WsServerConfig,
 };
 use crate::types::RpcMethods;
-use crate::utils::OnceStatic;
+use crate::utils::{OnceStatic, SHUTDOWN_FLAG};
 use anyhow::{bail, Result};
 use frame_support::log::info;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
@@ -117,7 +117,7 @@ pub async fn start_service(graceful_register: Sender<()>) -> Result<WsServerHand
             frequency,
             Some(graceful_register.clone()),
         );
-        while !INIT_SYNCING_FINISHED.load(SeqCst) {
+        while !INIT_SYNCING_FINISHED.load(SeqCst) && !SHUTDOWN_FLAG.load(SeqCst) {
             info!(target: "indexer", "still wait for initialized syncing finished...");
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
