@@ -125,7 +125,7 @@ pub async fn start_service(graceful_register: Sender<()>) -> Result<WsServerHand
 
     // start monitoring service.
     {
-        let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
+        let prometheus_addr = format!("127.0.0.1:{monitor_port}");
         prometheus_exporter::start(prometheus_addr.parse()?)?;
     }
 

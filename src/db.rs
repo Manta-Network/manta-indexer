@@ -124,10 +124,7 @@ where
         .map(|i| format!("?{}", i + 1))
         .collect::<Vec<String>>()
         .join(",");
-    let sql = format!(
-        "SELECT * FROM shards WHERE shard_index = ?1 and utxo_index IN ({})",
-        params
-    );
+    let sql = format!("SELECT * FROM shards WHERE shard_index = ?1 and utxo_index IN ({params})");
 
     let mut query = sqlx::query_as(sql.as_str());
     query = query.bind(shard_index);
@@ -303,10 +300,10 @@ where
         return Ok(vec![]);
     }
     let params = (1..=indices.len())
-        .map(|i| format!("?{}", i))
+        .map(|i| format!("?{i}"))
         .collect::<Vec<String>>()
         .join(",");
-    let sql = format!("SELECT * FROM nullifier WHERE idx IN ({})", params);
+    let sql = format!("SELECT * FROM nullifier WHERE idx IN ({params})");
 
     let mut query = sqlx::query_as(sql.as_str());
     for idx in indices {
@@ -413,7 +410,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn has_item_should_work() {
+    async fn has_shard_should_work() {
         let pool = create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());
 
@@ -421,7 +418,7 @@ mod tests {
 
         let shard_index = 206u8;
         let utxo_index = 1;
-        assert!(has_item(&pool, shard_index, utxo_index).await);
+        assert!(has_shard(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
 

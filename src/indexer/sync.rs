@@ -155,7 +155,8 @@ pub async fn sync_shards_from_full_node(
 
         // update total senders and receivers
         let new_total = resp.senders_receivers_total;
-        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, &new_total).await?;
+        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, &new_total)
+            .await?;
 
         transaction_handler.commit().await?;
 
@@ -190,7 +191,7 @@ pub async fn sync_shards_from_full_node(
             "sync new loop, fetch amount: {}, total amount: {}, total amount in server: {}, cost {} ms",
             resp.receivers.len(),
             total_items,
-            resp.senders_receivers_total,
+            <u128>::from_be_bytes(resp.senders_receivers_total),
             time
         );
 
@@ -353,7 +354,7 @@ pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
-        println!("pulling times: {}", times);
+        println!("pulling times: {times}");
     }
     Ok(time_cost)
 }
@@ -392,7 +393,7 @@ pub async fn pull_ledger_diff_from_sqlite(pool: &SqlitePool) -> Result<f32> {
         let t = now.elapsed().as_secs_f32();
         time_cost += t;
         times += 1;
-        println!("pulling times: {}. cost: {}", times, t);
+        println!("pulling times: {times}. cost: {t}");
     }
     Ok(time_cost)
 }

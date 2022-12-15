@@ -23,6 +23,7 @@ use anyhow::Result;
 use codec::{Decode, Encode};
 use frame_support::log::{debug, trace};
 use manta_pay::config::utxo::MerkleTreeConfiguration;
+use pallet_manta_pay::types::{NullifierCommitment, OutgoingNote};
 use sqlx::sqlite::SqlitePool;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
@@ -199,7 +200,7 @@ pub async fn pull_senders(
     put_batch_sender(write_back).await;
 
     Ok((
-        crate::db::has_nullifier(pool, sender_index as u64 + amount).await,
+        crate::db::has_nullifier(pool, sender_index + amount).await,
         sender_index + amount,
         senders,
     ))
