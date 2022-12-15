@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 pub use pallet_manta_pay::types::{
     Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk,
-    SenderChunk, Utxo, UtxoTransparency,
+    SenderChunk, Utxo,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -68,7 +68,7 @@ pub struct Nullifier {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DensePullResponse {
     /// Same with raw `PullResponse`
-    pub sender_receivers_total: u128,
+    pub sender_receivers_total: [u8; 16],
     /// Total amount of dense `ReceiverChunk`
     pub receiver_len: usize,
     /// Compression of dense `ReceiverChunk`

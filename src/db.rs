@@ -273,15 +273,15 @@ pub async fn get_batched_nullifier(
 
 pub async fn update_or_insert_total_senders_receivers(
     pool: &SqlitePool,
-    new_total: i64,
+    new_total: &[u8; 16],
 ) -> Result<()> {
     if let Ok(_val) = get_total_senders_receivers(pool).await {
         // the row exist, update it
-        if _val != new_total {
+        if &_val != new_total {
             let mut conn = pool.acquire().await?;
             let mut tx = conn.begin().await?;
             let _ = sqlx::query("UPDATE senders_receivers_total SET total = ?1;")
-                .bind(new_total)
+                .bind(new_total.to_vec())
                 .execute(&mut tx)
                 .await?;
             tx.commit().await?;
@@ -290,7 +290,7 @@ pub async fn update_or_insert_total_senders_receivers(
         let mut conn = pool.acquire().await?;
         let mut tx = conn.begin().await?;
         let _ = sqlx::query("INSERT INTO senders_receivers_total (total) VALUES (?1);")
-            .bind(new_total)
+            .bind(new_total.to_vec())
             .execute(&mut tx)
             .await?;
 
@@ -300,12 +300,16 @@ pub async fn update_or_insert_total_senders_receivers(
     Ok(())
 }
 
-pub async fn get_total_senders_receivers(pool: &SqlitePool) -> Result<i64> {
-    let total: (i64,) = sqlx::query_as("SELECT total FROM senders_receivers_total;")
+pub async fn get_total_senders_receivers(pool: &SqlitePool) -> Result<[u8; 16]> {
+    let total: (Vec<u8>,) = sqlx::query_as("SELECT total FROM senders_receivers_total;")
         .fetch_one(pool)
         .await?;
 
-    Ok(total.0)
+    let v: [u8; 16] = total
+        .0
+        .try_into()
+        .map_err(|_| crate::errors::IndexerError::WrongLittleEndianArray)?;
+    Ok(v)
 }
 
 #[cfg(test)]
@@ -351,7 +355,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{FullIncomingNote, PullResponse, Shard, UtxoTransparency};
+    use crate::types::{FullIncomingNote, PullResponse, Shard};
     use codec::Encode;
     use rand::distributions::{Distribution, Uniform};
 
@@ -368,11 +372,8 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..50);
-        let mut rng = rand::thread_rng();
-        let shard_index = shard_index_between.sample(&mut rng);
-        let utxo_index = utxo_index_between.sample(&mut rng);
+        let shard_index = 206u8;
+        let utxo_index = 1;
         let one_shard = get_one_shard(&pool, shard_index, utxo_index).await;
 
         assert!(one_shard.is_ok());
@@ -386,11 +387,8 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..50);
-        let mut rng = rand::thread_rng();
-        let shard_index = shard_index_between.sample(&mut rng);
-        let utxo_index = utxo_index_between.sample(&mut rng);
+        let shard_index = 206u8;
+        let utxo_index = 1;
         assert!(has_item(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
@@ -406,17 +404,15 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index_between = Uniform::from(0..=255); // [0, 256)
-        let utxo_index_between = Uniform::from(0..50);
+        let shard_index = 206u8;
+        let utxo_index_between = Uniform::from(0..2);
         let mut rng = rand::thread_rng();
-        let shard_index = shard_index_between.sample(&mut rng);
         let mut from_utxo_index = utxo_index_between.sample(&mut rng);
         let mut to_utxo_index = utxo_index_between.sample(&mut rng);
 
         if to_utxo_index < from_utxo_index {
             std::mem::swap(&mut to_utxo_index, &mut from_utxo_index);
         }
-        assert!(to_utxo_index > from_utxo_index);
 
         let batched_shards =
             get_batched_shards(&pool, shard_index, from_utxo_index, to_utxo_index).await;
@@ -445,7 +441,7 @@ mod tests {
         let mut pool = pool.unwrap();
 
         let utxo = Utxo {
-            transparency: UtxoTransparency::Opaque,
+            is_transparent: false,
             ..Default::default()
         };
         let note = FullIncomingNote {
@@ -559,8 +555,8 @@ mod tests {
         let pool = pool.unwrap();
 
         // insert total senders_receivers first
-        let new_total = 100;
-        assert!(update_or_insert_total_senders_receivers(&pool, new_total)
+        let new_total = 100u128.to_le_bytes();
+        assert!(update_or_insert_total_senders_receivers(&pool, &new_total)
             .await
             .is_ok());
 
@@ -571,7 +567,7 @@ mod tests {
         assert_eq!(val, new_total);
 
         // update the same total value
-        assert!(update_or_insert_total_senders_receivers(&pool, new_total)
+        assert!(update_or_insert_total_senders_receivers(&pool, &new_total)
             .await
             .is_ok());
         let val = get_total_senders_receivers(&pool).await;
@@ -579,10 +575,12 @@ mod tests {
         let val = val.unwrap();
         assert_eq!(val, new_total);
 
-        let new_total_1 = new_total + 50;
-        assert!(update_or_insert_total_senders_receivers(&pool, new_total_1)
-            .await
-            .is_ok());
+        let new_total_1 = (u128::from_le_bytes(new_total) + 50).to_le_bytes();
+        assert!(
+            update_or_insert_total_senders_receivers(&pool, &new_total_1)
+                .await
+                .is_ok()
+        );
         let val_1 = get_total_senders_receivers(&pool).await;
         assert!(val_1.is_ok());
         let val_1 = val_1.unwrap();
@@ -617,7 +615,7 @@ mod tests {
             should_continue: false,
             receivers: vec![],
             senders: vec![],
-            senders_receivers_total: 0,
+            senders_receivers_total: 0u128.to_le_bytes(),
         };
 
         let size = 1024 * 8;
