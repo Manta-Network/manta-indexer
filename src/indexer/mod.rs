@@ -80,12 +80,10 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
             .await?;
         Ok(DensePullResponse {
             sender_receivers_total: raw.senders_receivers_total,
-            receiver_len: raw.receivers.len(),
             receivers: base64::encode(raw.receivers.encode()),
-            sender_len: raw.senders.len(),
             senders: base64::encode(raw.senders.encode()),
             should_continue: raw.should_continue,
-            next_checkpoint,
+            next_checkpoint: Some(next_checkpoint),
         })
     }
 }
