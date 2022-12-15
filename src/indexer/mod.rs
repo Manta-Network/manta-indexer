@@ -41,8 +41,8 @@ pub trait MantaPayIndexerApi {
 
     /// Same semantic of `pull_ledger_diff`, but return a dense response,
     /// which is more friendly for transmission performance.
-    #[method(name = "densely_pull_ledger_diff")]
-    async fn densely_pull_ledger_diff(
+    #[method(name = "dense_pull_ledger_diff")]
+    async fn dense_pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
         max_receivers: u64,
@@ -69,7 +69,7 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
         Ok(response.0)
     }
 
-    async fn densely_pull_ledger_diff(
+    async fn dense_pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
         max_receivers: u64,

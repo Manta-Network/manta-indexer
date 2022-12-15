@@ -131,7 +131,7 @@ pub async fn pull_receivers_for_shard(
 
     // step2. query db for cache missing data.
     let shards = crate::db::get_batched_shards_by_idxs(pool, shard_index, query_db_indices).await?;
-    let mut write_back = vec![];
+    let mut write_back = Vec::with_capacity(shards.len());
 
     let mut stream_shards = tokio_stream::iter(shards.iter());
     while let Some(shard) = stream_shards.next().await {
@@ -182,7 +182,7 @@ pub async fn pull_senders(
 
     // step2. query db for cache missing data.
     let nullifiers = crate::db::get_batched_nullifier_by_idxs(pool, query_db_indices).await?;
-    let mut write_back = vec![];
+    let mut write_back = Vec::with_capacity(nullifiers.len());
 
     let mut stream_shards = tokio_stream::iter(nullifiers.iter());
     while let Some(nullifier) = stream_shards.next().await {

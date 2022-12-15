@@ -117,7 +117,7 @@ describe("indexer stress test", function () {
             let data: any;
             let before = performance.now();
             do {
-                data = await (api.rpc as any).mantaPay.densely_pull_ledger_diff(
+                data = await (api.rpc as any).mantaPay.dense_pull_ledger_diff(
                     {
                         receiver_index: ri,
                         sender_index: si,
@@ -173,7 +173,7 @@ describe("indexer stress test", function () {
                 });
             let si = gen_random(0, total_senders);
             let before = performance.now();
-            const data = await (api.rpc as any).mantaPay.densely_pull_ledger_diff(
+            const data = await (api.rpc as any).mantaPay.dense_pull_ledger_diff(
                 {
                     receiver_index: ri,
                     sender_index: si,
@@ -228,10 +228,10 @@ describe("indexer stress test", function () {
         }
     })
 
-    it.only("parse densely", async function () {
+    it.only("parse dense", async function () {
         let ri = new Array<number>(receiver_shard_num).fill(0);
         let si = 0;
-        const data = await (indexer_apis[0].rpc as any).mantaPay.densely_pull_ledger_diff(
+        const data = await (indexer_apis[0].rpc as any).mantaPay.dense_pull_ledger_diff(
             {
                 receiver_index: ri,
                 sender_index: si,

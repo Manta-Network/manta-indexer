@@ -75,8 +75,8 @@ export const manta_pay_types = {
     should_continue: "bool",
     receivers: "String",
     senders: "String",
-    senders_receivers_total: "u128",
-    next_checkpoint: "Checkpoint",
+    senders_receivers_total: "[u8; 16]",
+    next_checkpoint: "Option<Checkpoint>",
   }
 };
 
@@ -100,7 +100,7 @@ export const rpc_api = {
       ],
       type: "PullResponse",
     },
-    densely_pull_ledger_diff: {
+    dense_pull_ledger_diff: {
       description: "pull from mantaPay",
       params: [
         {
