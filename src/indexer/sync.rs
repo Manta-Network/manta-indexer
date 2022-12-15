@@ -28,7 +28,7 @@ use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClient;
 use manta_crypto::merkle_tree::forest::Configuration;
 use manta_pay::{
-    config::utxo::v3::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
+    config::utxo::{MerkleTreeConfiguration, UtxoAccumulatorItemHash},
     manta_parameters::{self, Get},
     manta_util::codec::Decode as _,
 };
@@ -154,9 +154,8 @@ pub async fn sync_shards_from_full_node(
         }
 
         // update total senders and receivers
-        let new_total = resp.senders_receivers_total as i64;
-        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, new_total)
-            .await?;
+        let new_total = resp.senders_receivers_total;
+        crate::db::update_or_insert_total_senders_receivers(&mut transaction_handler, &new_total).await?;
 
         transaction_handler.commit().await?;
 
@@ -289,7 +288,7 @@ pub async fn get_check_point_from_node(ws: &str) -> Result<Checkpoint> {
             "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
             next_checkpoint,
             resp.senders.len(),
-            resp.senders_receivers_total
+            u128::from_le_bytes(resp.senders_receivers_total)
         );
         if !resp.should_continue {
             break;
@@ -345,7 +344,7 @@ pub async fn pull_ledger_diff_from_local_node(url: &str) -> Result<f32> {
             "next checkpoint: {:?}, sender_index: {}, senders_receivers_total: {}",
             next_checkpoint,
             resp.senders.len(),
-            resp.senders_receivers_total
+            u128::from_le_bytes(resp.senders_receivers_total)
         );
         if !resp.should_continue {
             break;
@@ -406,11 +405,12 @@ mod tests {
     use codec::{Decode, Encode};
     use manta_xt::dolphin_runtime::runtime_types::pallet_manta_pay::types::TransferPost;
     use manta_xt::{dolphin_runtime, utils, MantaConfig};
-    use rand::distributions::{Distribution, Uniform};
     use std::fs::File;
     use std::io::prelude::*;
     use std::io::BufReader;
 
+    #[tokio::test]
+    #[ignore]
     async fn mint_one_coin() {
         let config = crate::utils::read_config().unwrap();
         let port = config["indexer"]["configuration"]["port"]
@@ -451,8 +451,6 @@ mod tests {
         println!("mint extrinsic submitted: {}", block_hash);
     }
 
-    #[tokio::test]
-    #[ignore]
     async fn mint_private_coins() {
         let config = crate::utils::read_config().unwrap();
         let port = config["indexer"]["configuration"]["port"]
@@ -463,6 +461,7 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
+        // this file contains 10 to_private extrinsics
         let file = File::open("./tests/integration-tests/precompile-coins/v1/precomputed_mints_v1")
             .unwrap();
         let mut buf_reader = BufReader::new(file);
@@ -475,7 +474,7 @@ mod tests {
         let signer =
             utils::create_signer_from_string::<MantaConfig, manta_xt::sr25519::Pair>(seed).unwrap();
 
-        let batch_size = 10;
+        let batch_size = 5;
         let coin_count = (contents.len() - off_set) / coin_size;
 
         let mut start = off_set;
@@ -543,18 +542,16 @@ mod tests {
             None,
         );
         let last_check_point = db::get_latest_check_point(&pool).await.unwrap();
-        let last_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
 
-        // mint one coin
-        mint_one_coin().await;
+        // send 10 to_private extrinsics, 10 UTXOs should be generated.
+        let expected_10_new_utxos = 10;
+        mint_private_coins().await;
 
         // sleep 2 * frequency more seconds.
         tokio::time::sleep(Duration::from_secs(frequency * 2)).await;
 
         let current_check_point = db::get_latest_check_point(&pool).await.unwrap();
 
-        let current_senders_receivers_total = db::get_total_senders_receivers(&pool).await.unwrap();
-        let count_of_new_utxo = current_senders_receivers_total - last_senders_receivers_total;
         let mut count = 0;
         for (shard_index, (last, current)) in last_check_point
             .receiver_index
@@ -576,7 +573,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(count as i64, count_of_new_utxo);
+        assert_eq!(count as u128, expected_10_new_utxos);
         assert!(count >= 1);
         handler.abort();
     }
@@ -632,13 +629,18 @@ mod tests {
             .await
             .expect("Failed to create client.");
 
+        let shard_idxs = [
+            (206u8, 0u64),
+            (206u8, 1u64),
+            (173u8, 0u64),
+            (222u8, 1u64),
+            (89u8, 0u64),
+        ];
+
         // check shards randomly for 5 times
-        for _ in 0..5 {
-            let shard_index_between = Uniform::from(0..=20); // [0, 256)
-            let utxo_index_between = Uniform::from(0..100);
-            let mut rng = rand::thread_rng();
-            let shard_index = shard_index_between.sample(&mut rng);
-            let utxo_index = utxo_index_between.sample(&mut rng);
+        for i in 0..5usize {
+            let shard_index = shard_idxs[i].0;
+            let utxo_index = shard_idxs[i].1;
             let _shard = dolphin_runtime::storage()
                 .manta_pay()
                 .shards(shard_index as u8, utxo_index as u64);
@@ -653,6 +655,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn incremental_synchronization_should_update_cache() -> Result<()> {
         let pool = crate::db::create_test_db_or_first_pull(true).await;
         assert!(pool.is_ok());

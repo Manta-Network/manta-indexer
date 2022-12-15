@@ -34,6 +34,8 @@ pub enum IndexerError {
     WrongConfig,
     #[error("This rpc method doesn't exist.")]
     RpcMethodNotExists,
+    #[error("Wrong little endian array for u128.")]
+    WrongLittleEndianArray,
     #[error("Unknown error.")]
     Unknown,
 }

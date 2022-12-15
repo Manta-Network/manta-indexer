@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS "nullifier"
 );
 
 -- create the total of senders and receivers table
+-- the little endian foramt of u128: [u8; 16]
 CREATE TABLE IF NOT EXISTS "senders_receivers_total"
 (
-    total INTEGER NOT NULL
+    total BLOB NOT NULL
 );
