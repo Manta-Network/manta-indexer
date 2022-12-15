@@ -385,8 +385,10 @@ mod tests {
     use super::*;
     use crate::types::{FullIncomingNote, PullResponse, Shard};
     use codec::Encode;
+    use frame_support::log::LevelFilter::Trace;
     use rand::distributions::{Distribution, Uniform};
     use rand::prelude::SliceRandom;
+    use simple_logger::SimpleLogger;
 
     #[tokio::test]
     async fn do_migration_should_work() {

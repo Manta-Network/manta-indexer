@@ -58,6 +58,7 @@ struct ShardThreadSafeLru {
     maps: Vec<Mutex<LruCache<LruKeyType, Vec<u8>>>>,
 }
 
+#[allow(clippy::or_fun_call)]
 impl ShardThreadSafeLru {
     async fn batch_get(&self, keys: Vec<LruKeyType>) -> Vec<Option<Vec<u8>>> {
         let mut result = std::iter::repeat(None)

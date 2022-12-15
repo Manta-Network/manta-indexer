@@ -22,9 +22,12 @@ CREATE TABLE IF NOT EXISTS "nullifier"
     outgoing_note        BLOB NOT NULL
 );
 
--- create the total of senders and receivers table
--- the little endian foramt of u128: [u8; 16]
+-- create the total of senders and receivers table.
+-- the little endian foramt of u128: [u8; 16].
+-- this table only has one line, we use constraint to make it.
 CREATE TABLE IF NOT EXISTS "senders_receivers_total"
 (
+    id BOOLEAN PRIMARY KEY DEFAULT True CONSTRAINT one_row_only CHECK (id),
     total BLOB NOT NULL
 );
+
