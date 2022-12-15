@@ -51,6 +51,7 @@ pub struct Shard {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Nullifier {
+    pub idx: i64,
     pub nullifier_commitment: Vec<u8>,
     pub outgoing_note: Vec<u8>,
 }
@@ -68,21 +69,22 @@ pub struct Nullifier {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DensePullResponse {
     /// Same with raw `PullResponse`
-    pub sender_receivers_total: [u8; 16],
-    /// Total amount of dense `ReceiverChunk`
-    pub receiver_len: usize,
+    pub should_continue: bool,
     /// Compression of dense `ReceiverChunk`
     pub receivers: String,
-    /// Total amount of dense `SenderChunk`
-    pub sender_len: usize,
     /// Compression of dense `SenderChunk`
     pub senders: String,
     /// Same with raw `PullResponse`
-    pub should_continue: bool,
+    pub sender_receivers_total: [u8; 16],
+
     /// Next request checkpoint calculated from server.
     /// If should_continue = false, this data makes no sense.
     /// Else, the client can just use this one as next request cursor,
     /// It avoids complex computing on the client side,
-    /// and the potential risk of inconsistent computing rules between the client and server
-    pub next_checkpoint: Checkpoint,
+    /// and the potential risk of inconsistent computing rules between the client and server.
+    ///
+    /// The reason this field is a option instead of a straight struct is that we
+    /// want to keep api same with runtime, and runtime can't support next_checkpoint so easy.
+    /// So, for indexer, this field return some, for full node, this field return none.
+    pub next_checkpoint: Option<Checkpoint>,
 }

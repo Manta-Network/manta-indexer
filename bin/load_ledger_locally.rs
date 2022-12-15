@@ -7,6 +7,7 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::config::{Appender, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::Config;
+use manta_indexer::utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,7 +39,14 @@ async fn main() -> Result<()> {
     let sync_db = "local_sync.db";
     let pool_size = 16u32;
     let pool = manta_indexer::db::initialize_db_pool(sync_db, pool_size).await?;
-    manta_indexer::indexer::sync::pull_all_shards_to_db(&pool, full_node).await?;
+    let ws_client = utils::create_ws_client(full_node).await?;
+    manta_indexer::indexer::sync::sync_shards_from_full_node(
+        &ws_client,
+        &pool,
+        (1024 * 4, 1024 * 4),
+        false,
+    )
+    .await?;
     pool.close().await;
     Ok(())
 }

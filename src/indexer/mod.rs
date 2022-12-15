@@ -22,6 +22,7 @@ use jsonrpsee::{
 };
 use sqlx::sqlite::SqlitePool;
 
+mod cache;
 pub mod pull;
 pub mod sync;
 
@@ -40,8 +41,8 @@ pub trait MantaPayIndexerApi {
 
     /// Same semantic of `pull_ledger_diff`, but return a dense response,
     /// which is more friendly for transmission performance.
-    #[method(name = "densely_pull_ledger_diff")]
-    async fn densely_pull_ledger_diff(
+    #[method(name = "dense_pull_ledger_diff")]
+    async fn dense_pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
         max_receivers: u64,
@@ -68,7 +69,7 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
         Ok(response.0)
     }
 
-    async fn densely_pull_ledger_diff(
+    async fn dense_pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
         max_receivers: u64,
@@ -79,12 +80,10 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
             .await?;
         Ok(DensePullResponse {
             sender_receivers_total: raw.senders_receivers_total,
-            receiver_len: raw.receivers.len(),
-            receivers: hex::encode(raw.receivers.encode()),
-            sender_len: raw.senders.len(),
-            senders: hex::encode(raw.senders.encode()),
+            receivers: base64::encode(raw.receivers.encode()),
+            senders: base64::encode(raw.senders.encode()),
             should_continue: raw.should_continue,
-            next_checkpoint,
+            next_checkpoint: Some(next_checkpoint),
         })
     }
 }

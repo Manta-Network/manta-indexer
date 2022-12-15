@@ -96,8 +96,10 @@ pub async fn is_full_node_started(ws: &WsClient) -> Result<bool> {
     Ok(latest_block != current_block)
 }
 
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 /// OnceStatic is a wrapper for static object initializing with OnceCell Lazy.
 /// It allows an active initialization during the system startup phase.
@@ -144,6 +146,10 @@ impl<T> Deref for OnceStatic<T> {
             .unwrap_or_else(|| panic!("static wrapper {} not init yet.", self.name))
     }
 }
+
+/// A global graceful shutdown switch, will be set true when receive a ctrl+c.
+/// Each async task should watch this and deal with shutdown.
+pub static SHUTDOWN_FLAG: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
 
 #[cfg(test)]
 mod tests {
