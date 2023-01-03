@@ -15,7 +15,7 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::sub_client_pool::MtoMSubClientPool;
-use crate::types::{Health, RpcMethods};
+use crate::types::Health;
 use anyhow::Result;
 use jsonrpsee::{
     core::{async_trait, client::ClientT, RpcResult},
@@ -205,10 +205,6 @@ pub trait MantaRelayApi {
     // https://github.com/paritytech/substrate/blob/master/client/rpc-api/src/author/mod.rs#L57
     #[method(name = "author_pendingExtrinsics")]
     async fn pending_extrinsics(&self) -> RpcResult<Vec<Bytes>>;
-
-    // attached by framework.
-    #[method(name = "rpc_methods")]
-    async fn rpc_methods(&self) -> RpcResult<RpcMethods>;
 
     /// subscription fn declaration.
 
@@ -454,15 +450,6 @@ impl MantaRelayApiServer for MantaRpcRelayServer {
             .dmc
             .request("author_pendingExtrinsics", rpc_params![])
             .await?)
-    }
-
-    async fn rpc_methods(&self) -> RpcResult<RpcMethods> {
-        let methods = self
-            .dmc
-            .request::<RpcMethods>("rpc_methods", rpc_params![])
-            .await?;
-
-        Ok(methods)
     }
 
     /// subscription methods.

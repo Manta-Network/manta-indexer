@@ -18,22 +18,24 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum IndexerError {
-    #[error("The resuest is timeout.")]
+    #[error("The result is timeout.")]
     RequestTimeOut,
     #[error("Seems full node doesn't work.")]
     FullNodeIsDown,
     #[error("Failed to fetch data from db due to: {0}.")]
     DbFetchError(#[from] sqlx::Error),
-    #[error("Wrong merkle tree index.")]
-    WrongMerkleTreeIndex,
-    #[error("Failed to decode as codec foramt.")]
-    DecodedError,
-    #[error("JsonRpsee Error: {0}.")]
+    #[error("Failed to convert utxo.")]
+    BadUtxo,
+    #[error("Failed to decode as codec format, type =  {0}")]
+    DecodedError(String),
+    #[error("Jsonrpsee Error: {0}.")]
     JsonRpseeError(#[from] jsonrpsee::core::error::Error),
     #[error("Wrong config file(config.toml).")]
     WrongConfig,
     #[error("This rpc method doesn't exist.")]
     RpcMethodNotExists,
+    #[error("Wrong little endian array for u128.")]
+    WrongLittleEndianArray,
     #[error("Unknown error.")]
     Unknown,
 }

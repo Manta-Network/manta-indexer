@@ -15,6 +15,7 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::constants::MEGABYTE;
+use crate::indexer::sync::INIT_SYNCING_FINISHED;
 use crate::indexer::{MantaPayIndexerApiServer, MantaPayIndexerServer};
 use crate::indexer::{MAX_RECEIVERS, MAX_SENDERS};
 use crate::monitoring::IndexerMiddleware;
@@ -22,12 +23,19 @@ use crate::relayer::{
     relay_server::{MantaRelayApiServer, MantaRpcRelayServer},
     WsServerConfig,
 };
+use crate::types::RpcMethods;
+use crate::utils::{OnceStatic, SHUTDOWN_FLAG};
 use anyhow::{bail, Result};
+use frame_support::log::info;
 use jsonrpsee::ws_server::{WsServerBuilder, WsServerHandle};
+use std::sync::atomic::Ordering::SeqCst;
+use std::time::Duration;
+use tokio::sync::mpsc::Sender;
 
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
+static RPC_METHODS: OnceStatic<RpcMethods> = OnceStatic::new("RPC_METHODS");
 
-pub async fn start_service() -> Result<WsServerHandle> {
+pub async fn start_service(graceful_register: Sender<()>) -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
 
     let config = crate::utils::read_config()?;
@@ -74,15 +82,52 @@ pub async fn start_service() -> Result<WsServerHandle> {
     let config = config["server"]["configuration"].to_string();
     let srv_config: WsServerConfig = toml::from_str(&config)?;
 
-    let mut available_methods = module.method_names().collect::<Vec<_>>();
+    let mut available_methods = module
+        .method_names()
+        .map(|s| s.to_owned())
+        .collect::<Vec<_>>();
     available_methods.sort_unstable();
-    module
-        .register_method("indexer_rpc_methods", move |_, _| {
-            Ok(serde_json::json!({
-                "methods": available_methods,
-            }))
+    info!(target: "indexer", "all methods: {:?}", available_methods);
+    RPC_METHODS.init(move || {
+        Ok(RpcMethods {
+            version: 1,
+            methods: available_methods,
         })
+    })?;
+
+    // we may miss some methods, may add some methods that only exists in indexer.
+    // so we rewrite the `rpc_methods` instead of relay full node's, since those two response is not quite same.
+    // this way also allows polkadot-js found api only defined in indexer
+    // see: https://polkadot.js.org/docs/api/start/rpc.custom#custom-definitions
+    module
+        .register_method("rpc_methods", move |_, _| Ok(RPC_METHODS.clone()))
         .expect("infallible all other methods have their own address space; qed");
+
+    // start a backend syncing thread.
+    {
+        let ws_client = crate::utils::create_ws_client(full_node).await?;
+        // ensure the full node has this rpc method.
+        crate::utils::is_the_rpc_methods_existed(&ws_client, rpc_method)
+            .await
+            .map_err(|_| crate::errors::IndexerError::RpcMethodNotExists)?;
+        crate::indexer::sync::start_sync_ledger_job(
+            ws_client,
+            db_pool,
+            (MAX_RECEIVERS, MAX_SENDERS),
+            frequency,
+            Some(graceful_register.clone()),
+        );
+        while !INIT_SYNCING_FINISHED.load(SeqCst) && !SHUTDOWN_FLAG.load(SeqCst) {
+            info!(target: "indexer", "still wait for initialized syncing finished...");
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    }
+
+    // start monitoring service.
+    {
+        let prometheus_addr = format!("127.0.0.1:{monitor_port}");
+        prometheus_exporter::start(prometheus_addr.parse()?)?;
+    }
 
     let srv_addr = format!("127.0.0.1:{port}");
     let server = WsServerBuilder::new()
@@ -94,26 +139,5 @@ pub async fn start_service() -> Result<WsServerHandle> {
         .set_middleware(IndexerMiddleware::default())
         .build(srv_addr)
         .await?;
-
-    // start to sync utxo
-    let ws_client = crate::utils::create_ws_client(full_node).await?;
-    // ensure the full node has this rpc method.
-    crate::utils::is_the_rpc_methods_existed(&ws_client, rpc_method)
-        .await
-        .map_err(|_| crate::errors::IndexerError::RpcMethodNotExists)?;
-
-    let _addr = server.local_addr()?;
-    let handle = server.start(module)?;
-
-    crate::indexer::sync::start_sync_ledger_job(
-        &ws_client,
-        db_pool,
-        (MAX_RECEIVERS, MAX_SENDERS),
-        frequency,
-    )
-    .await?;
-
-    let prometheus_addr = format!("127.0.0.1:{}", monitor_port);
-    prometheus_exporter::start(prometheus_addr.parse()?)?;
-    Ok(handle)
+    Ok(server.start(module)?)
 }

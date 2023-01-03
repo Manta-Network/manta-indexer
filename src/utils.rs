@@ -96,6 +96,61 @@ pub async fn is_full_node_started(ws: &WsClient) -> Result<bool> {
     Ok(latest_block != current_block)
 }
 
+use once_cell::sync::{Lazy, OnceCell};
+use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
+/// OnceStatic is a wrapper for static object initializing with OnceCell Lazy.
+/// It allows an active initialization during the system startup phase.
+/// # Example
+/// ```ignore
+/// // before we have OnceStatic, we can only initial one variable with a closure function.
+/// // but sometime we need to firstly read some configuration and initial them by that.
+/// static x: Config = Lazy::new(|| Default::default());
+/// // Using OnceStatic, like:
+/// static x: OnceStatic<Config> = OnceStatic::new("x");
+/// x.init(|| Default::default());
+/// println!("{}, {}", x.a, x.b)
+/// ```
+#[derive(Debug)]
+pub struct OnceStatic<T> {
+    inner: OnceCell<T>,
+    name: &'static str,
+}
+
+impl<T> OnceStatic<T> {
+    pub fn init<F: FnOnce() -> Result<T>>(&self, f: F) -> Result<()> {
+        match self.inner.set(f()?) {
+            Ok(_) => Ok(()),
+            Err(_) => unreachable!("global config {} init twice", self.name),
+        }
+    }
+
+    /// * `name`: It's a name for debugging. we can optimize the code style with macro soon.
+    ///  for now, just type it same with variable name.
+    /// Eg: static GLOBAL_V: OnceStatic<Config> = OnceStatic::new("GLOBAL_V");
+    pub const fn new(name: &'static str) -> OnceStatic<T> {
+        OnceStatic {
+            inner: OnceCell::new(),
+            name,
+        }
+    }
+}
+
+impl<T> Deref for OnceStatic<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.inner
+            .get()
+            .unwrap_or_else(|| panic!("static wrapper {} not init yet.", self.name))
+    }
+}
+
+/// A global graceful shutdown switch, will be set true when receive a ctrl+c.
+/// Each async task should watch this and deal with shutdown.
+pub static SHUTDOWN_FLAG: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
+
 #[cfg(test)]
 mod tests {
     use super::*;

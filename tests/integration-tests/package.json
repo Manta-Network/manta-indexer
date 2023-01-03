@@ -8,11 +8,12 @@
   "scripts": {
     "lint:write": "prettier --write .",
     "debug": "tsc --project ./ && node dist/test-indexer.js",
+    "initialize-assets": "tsc --project ./ && node dist/initialize-assets.js",
     "mint": "tsc --project ./ && node dist/mint-private-coins.js",
     "test-relayer": "mocha --timeout 60000 --reporter-options maxDiffSize=8192000 -r ts-node/register src/test-rpc-relaying.ts",
     "test-indexer": "mocha --timeout 60000 --reporter-options maxDiffSize=8192000 -r ts-node/register src/test-indexer.ts",
     "block-production": "mocha --timeout 60000 -r ts-node/register src/check-bp.ts",
-    "stress-test": "mocha --timeout 120000 -r ts-node/register src/stress-test.ts"
+    "stress-test": "mocha --timeout 1200000 -r ts-node/register src/stress-test.ts"
   },
   "dependencies": {
     "@polkadot/api": "^9.6.1",
@@ -24,7 +25,9 @@
     "@types/chai": "^4.3.3",
     "@types/mocha": "^10.0.0",
     "chai": "^4.3.6",
-    "mocha": "^10.1.0"
+    "mocha": "^10.1.0",
+    "scale-codec": "^0.9.1",
+    "scale-ts": "^0.2.11"
   },
   "mocha": {
     "require": [

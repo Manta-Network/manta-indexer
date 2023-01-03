@@ -10,12 +10,13 @@ async function main() {
   const aliceSeed = "//Alice";
   const alice = keyring.addFromUri(aliceSeed);
 
-  const offSet = 2;
-  const coinSize = 349; // each coin size is 349.
-  const coinsCount = 12;
-  // send 4 mint private transactions for each batch.
-  const batchSize = 4;
-  const content = await readFile("precompile-coins/precomputed_mints_v0");
+  const offSet = 1;
+  const coinSize = 552; // each coin size is 552.
+  const coinsCount = 40;
+  // send 5 mint private transactions for each batch.
+  const batchSize = 5;
+  // this file contains 40 to_private extrinsics to initialize UTXOs for next testing
+  const content = await readFile("precompile-coins/v1/initialize-utxo");
   const buffer = content.subarray(
     offSet + 0 * batchSize * coinSize,
     offSet + 0 * batchSize * coinSize + coinSize * coinsCount
@@ -25,9 +26,7 @@ async function main() {
   for (let k = 0; k < coinsCount / batchSize; ++k) {
     let mintTxs = [];
     for (let i = 0; i < batchSize; ++i) {
-      const mint = indexerApi.tx.mantaPay.toPrivate(
-        buffer.subarray(start)
-      );
+      const mint = indexerApi.tx.mantaPay.toPrivate(buffer.subarray(start));
       mintTxs.push(mint);
       start = end;
       end += coinSize;

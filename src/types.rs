@@ -14,78 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::mem;
 
-pub const CIPHER_TEXT_LENGTH: usize = 68;
-pub const EPHEMERAL_PUBLIC_KEY_LENGTH: usize = 32;
-pub const UTXO_LENGTH: usize = 32;
-pub const VOID_NUMBER_LENGTH: usize = 32;
-
-/// Void Number Type
-pub type VoidNumber = [u8; VOID_NUMBER_LENGTH];
-
-/// UTXO Type
-pub type Utxo = [u8; UTXO_LENGTH];
-
-/// Group Type
-pub type Group = [u8; EPHEMERAL_PUBLIC_KEY_LENGTH];
-
-/// Ciphertext Type
-pub type Ciphertext = [u8; CIPHER_TEXT_LENGTH];
-
-/// Receiver Chunk Data Type
-pub type ReceiverChunk = Vec<(Utxo, EncryptedNote)>; // The size of each single element should be 132 bytes
-
-/// Sender Chunk Data Type
-pub type SenderChunk = Vec<VoidNumber>;
-
-pub const fn size_of_utxo() -> usize {
-    UTXO_LENGTH
-}
-
-pub const fn size_of_encrypted_note() -> usize {
-    EPHEMERAL_PUBLIC_KEY_LENGTH + CIPHER_TEXT_LENGTH
-}
-
-pub const fn size_of_void_number() -> usize {
-    VOID_NUMBER_LENGTH
-}
-
-pub fn size_of_receiver_chunk(chunk: &ReceiverChunk) -> usize {
-    chunk.len() * (size_of_encrypted_note() + size_of_encrypted_note())
-}
-
-pub fn size_of_sender_chunk(chunk: &SenderChunk) -> usize {
-    chunk.len() * size_of_void_number()
-}
-
-pub fn size_of_pull_response(resp: &PullResponse) -> usize {
-    let mut _size = 0;
-    _size += mem::size_of_val(&resp.should_continue);
-    _size += mem::size_of_val(&resp.senders_receivers_total);
-    _size += size_of_sender_chunk(&resp.senders);
-    _size += size_of_receiver_chunk(&resp.receivers);
-
-    _size
-}
-
-pub fn upper_bound_for_response(payload_size: usize) -> (usize, usize) {
-    let senders_share = size_of_void_number() as f32
-        / (size_of_encrypted_note() + size_of_encrypted_note() + size_of_void_number()) as f32;
-    let receivers_share = 1.0f32 - senders_share;
-
-    let sender_len = senders_share * payload_size as f32 / size_of_void_number() as f32;
-    let receivers_len = receivers_share * payload_size as f32
-        / (size_of_encrypted_note() + size_of_encrypted_note()) as f32;
-    (sender_len as usize, receivers_len as usize)
-}
+pub use pallet_manta_pay::types::{
+    Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk,
+    SenderChunk, Utxo,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RpcMethods {
-    version: u32,
-    methods: Vec<String>,
+    pub version: u32,
+    pub methods: Vec<String>,
 }
 
 /// Health struct returned by the RPC
@@ -102,40 +41,50 @@ pub struct Health {
     pub should_have_peers: bool,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize, sqlx::Decode, sqlx::Encode)]
-pub struct EncryptedNote {
-    /// Ephemeral Public Key
-    pub ephemeral_public_key: Group,
-
-    /// Ciphertext
-    #[serde(
-        with = "manta_util::serde_with::As::<[manta_util::serde_with::Same; CIPHER_TEXT_LENGTH]>"
-    )]
-    pub ciphertext: Ciphertext,
-}
-
-#[derive(Clone, Debug, Decode, Encode, Deserialize, Serialize)]
-pub struct PullResponse {
-    /// Pull Continuation Flag
-    ///
-    /// The `should_continue` flag is set to `true` if the client should request more data from the
-    /// ledger to finish the pull.
-    pub should_continue: bool,
-
-    /// Ledger Receiver Chunk
-    pub receivers: ReceiverChunk,
-
-    /// Ledger Sender Chunk
-    pub senders: SenderChunk,
-
-    /// Total Number of (Senders + Receivers) in Ledger
-    pub senders_receivers_total: u128,
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Shard {
     pub shard_index: u8,
-    pub next_index: i64,
-    // utxo: (Utxo, EncryptedNote),
+    pub utxo_index: i64, // sqlite doesn't support u64
     pub utxo: Vec<u8>,
+    pub full_incoming_note: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Nullifier {
+    pub idx: i64,
+    pub nullifier_commitment: Vec<u8>,
+    pub outgoing_note: Vec<u8>,
+}
+
+/// `DensePullResponse` is the dense design of raw `PullResponse`.
+/// The reason for creating it is that raw `PullResponse` always carries a bunch of sender
+/// and receiver chunks, which is quite not friendly for json serde and de-serde.
+/// So with raw format, serialization will generates a large bottleneck.
+/// So we will use `DensePullResponse` as transmission protocol.
+///
+/// Note:
+/// Most of the time(90%+) is spent writing into json strings,
+/// so the key design here is to improve the compression ratio of the chunks string ASAP.
+/// If you want to improve, you can try more effective compression algorithm like `zstd`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DensePullResponse {
+    /// Same with raw `PullResponse`
+    pub should_continue: bool,
+    /// Compression of dense `ReceiverChunk`
+    pub receivers: String,
+    /// Compression of dense `SenderChunk`
+    pub senders: String,
+    /// Same with raw `PullResponse`
+    pub sender_receivers_total: [u8; 16],
+
+    /// Next request checkpoint calculated from server.
+    /// If should_continue = false, this data makes no sense.
+    /// Else, the client can just use this one as next request cursor,
+    /// It avoids complex computing on the client side,
+    /// and the potential risk of inconsistent computing rules between the client and server.
+    ///
+    /// The reason this field is a option instead of a straight struct is that we
+    /// want to keep api same with runtime, and runtime can't support next_checkpoint so easy.
+    /// So, for indexer, this field return some, for full node, this field return none.
+    pub next_checkpoint: Option<Checkpoint>,
 }

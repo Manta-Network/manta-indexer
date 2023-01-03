@@ -93,7 +93,7 @@ describe("Relaying non subscription rpc methods", function () {
   });
 
   // rpc_methods
-  it("should return a rpc methods list", async function () {
+  it.skip("should return a rpc methods list", async function () {
     const fullNodeRpcMethods = await fullNodeApi.rpc.rpc.methods();
     const indexerRpcMethods = await indexerApi.rpc.rpc.methods();
     assert.equal(

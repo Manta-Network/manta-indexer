@@ -14,19 +14,20 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::types::PullResponse;
+use crate::types::{Checkpoint, DensePullResponse, PullResponse};
+use codec::Encode;
 use jsonrpsee::{
     core::{async_trait, error::Error as JsonRpseeError, RpcResult},
     proc_macros::rpc,
 };
-use manta_pay::signer::Checkpoint;
 use sqlx::sqlite::SqlitePool;
 
+mod cache;
 pub mod pull;
 pub mod sync;
 
-pub const MAX_SENDERS: u64 = 1024 * 16;
-pub const MAX_RECEIVERS: u64 = 1024 * 16;
+pub const MAX_SENDERS: u64 = 1024 * 4;
+pub const MAX_RECEIVERS: u64 = 1024 * 4;
 
 #[rpc(server, namespace = "mantaPay")]
 pub trait MantaPayIndexerApi {
@@ -37,6 +38,16 @@ pub trait MantaPayIndexerApi {
         max_receivers: u64,
         max_senders: u64,
     ) -> RpcResult<PullResponse>;
+
+    /// Same semantic of `pull_ledger_diff`, but return a dense response,
+    /// which is more friendly for transmission performance.
+    #[method(name = "dense_pull_ledger_diff")]
+    async fn dense_pull_ledger_diff(
+        &self,
+        checkpoint: Checkpoint,
+        max_receivers: u64,
+        max_senders: u64,
+    ) -> RpcResult<DensePullResponse>;
 }
 
 pub struct MantaPayIndexerServer {
@@ -49,29 +60,54 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
     async fn pull_ledger_diff(
         &self,
         checkpoint: Checkpoint,
-        mut max_receivers: u64,
-        mut max_senders: u64,
+        max_receivers: u64,
+        max_senders: u64,
     ) -> RpcResult<PullResponse> {
-        // Currently, there's a limit on max size of reposne body, 10MB.
-        // So 10MB means the params for (max_receivers, max_senders) is (1024 * 16, 1024 * 16).
-        // If the params exceeds the value, pull_ledger_diff still returns 1024 * 16 utxos at most in one time.
-        // so no error will be returned.
-        if max_receivers > MAX_RECEIVERS || max_senders > MAX_SENDERS {
-            max_receivers = MAX_RECEIVERS;
-            max_senders = MAX_SENDERS;
-        }
+        let response = self
+            .pull_ledger_diff_impl(checkpoint, max_receivers, max_senders)
+            .await?;
+        Ok(response.0)
+    }
 
-        let response =
-            pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
-                .await
-                .map_err(|e| JsonRpseeError::Custom(e.to_string()))?;
-
-        Ok(response)
+    async fn dense_pull_ledger_diff(
+        &self,
+        checkpoint: Checkpoint,
+        max_receivers: u64,
+        max_senders: u64,
+    ) -> RpcResult<DensePullResponse> {
+        let (raw, next_checkpoint) = self
+            .pull_ledger_diff_impl(checkpoint, max_receivers, max_senders)
+            .await?;
+        Ok(DensePullResponse {
+            sender_receivers_total: raw.senders_receivers_total,
+            receivers: base64::encode(raw.receivers.encode()),
+            senders: base64::encode(raw.senders.encode()),
+            should_continue: raw.should_continue,
+            next_checkpoint: Some(next_checkpoint),
+        })
     }
 }
 
 impl MantaPayIndexerServer {
     pub fn new(db_pool: SqlitePool) -> Self {
         Self { db_pool }
+    }
+
+    async fn pull_ledger_diff_impl(
+        &self,
+        checkpoint: Checkpoint,
+        mut max_receivers: u64,
+        mut max_senders: u64,
+    ) -> RpcResult<(PullResponse, Checkpoint)> {
+        // Currently, there's a limit on max size of response body, 10MB.
+        // We need to limit the max amount according to ReceiverChunk and SenderChunk.
+        // If the params exceeds the value, pull_ledger_diff still returns limitation data at most in one time.
+        // so no error will be returned.
+        max_receivers = max_receivers.min(MAX_RECEIVERS);
+        max_senders = max_senders.min(MAX_SENDERS);
+
+        pull::pull_ledger_diff(&self.db_pool, &checkpoint, max_receivers, max_senders)
+            .await
+            .map_err(|e| JsonRpseeError::Custom(e.to_string()))
     }
 }

@@ -29,20 +29,17 @@ jobs:
           chmod +x ${{ github.workspace }}/.github/resources/polkadot
       - name: Get manta
         run: |
-          curl -L -o ${{ github.workspace }}/.github/resources/manta https://github.com/Manta-Network/Manta/releases/download/v3.4.3/manta
+          curl -L -o ${{ github.workspace }}/.github/resources/manta https://github.com/Manta-Network/Manta/releases/download/v4.0.0-alpha.1/manta
           chmod +x ${{ github.workspace }}/.github/resources/manta
       - name: Start Relaychain Network with Dolphin
         run: |
           cd ${{ github.workspace }}/polkadot-launch
-          curl -L -o ${{ github.workspace }}/.github/resources/mantapay-v0.json https://manta-ops.s3.amazonaws.com/v3.4.3-bfa08d6/fork.json
           cat ${{ github.workspace }}/.github/resources/dolphin.json | \
             jq \
               --arg relaychain_bin ${{ github.workspace }}/.github/resources/polkadot \
               --arg parachains_bin ${{ github.workspace }}/.github/resources/manta \
-              --arg parachains_chain ${{ github.workspace }}/.github/resources/mantapay-v0.json \
               '.relaychain.bin = $relaychain_bin
               | .parachains[0].bin = $parachains_bin
-              | .parachains[0].chain = $parachains_chain
               ' > ${{ github.workspace }}/.github/resources/dolphin-ci.json
           yarn
           yarn build
@@ -57,6 +54,16 @@ jobs:
           cd ${{ github.workspace }}/tests/integration-tests
           yarn
           yarn block-production
+      - name: Initialize Assets
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn initialize-assets
+      - name: Initialize UTXOs
+        run: |
+          cd ${{ github.workspace }}/tests/integration-tests
+          yarn
+          yarn mint
       - name: Run Relayer Integration Test
         run: |
           cd ${{ github.workspace }}/tests/integration-tests
