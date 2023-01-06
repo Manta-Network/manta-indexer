@@ -38,7 +38,8 @@ async fn main() -> Result<()> {
     // db path to save
     let sync_db = "local_sync.db";
     let pool_size = 16u32;
-    let pool = manta_indexer::db::initialize_db_pool(sync_db, pool_size).await?;
+    let migrations_path = "./migrations";
+    let pool = manta_indexer::db::initialize_db_pool(migrations_path, sync_db, pool_size).await?;
     let ws_client = utils::create_ws_client(full_node).await?;
     manta_indexer::indexer::sync::sync_shards_from_full_node(
         &ws_client,

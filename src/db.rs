@@ -1,4 +1,4 @@
-// Copyright 2020-2022 Manta Network.
+// Copyright 2020-2023 Manta Network.
 // This file is part of Manta.
 //
 // Manta is free software: you can redistribute it and/or modify
@@ -30,8 +30,12 @@ use tokio_stream::StreamExt;
 
 /// Initialize sqlite as WAL mode(Write-Ahead Logging)
 // https://sqlite.org/wal.html
-pub async fn initialize_db_pool(db_url: &str, pool_size: u32) -> Result<SqlitePool> {
-    let m = Migrator::new(Path::new("./migrations")).await?;
+pub async fn initialize_db_pool(
+    migrations_path: &str,
+    db_url: &str,
+    pool_size: u32,
+) -> Result<SqlitePool> {
+    let m = Migrator::new(Path::new(migrations_path)).await?;
 
     // ensure the db exists.
     if let Err(_) | Ok(false) = sqlx::sqlite::Sqlite::database_exists(db_url).await {
@@ -351,6 +355,7 @@ async fn clean_up(conn: &mut SqlitePool, table_name: &str) -> Result<()> {
 #[cfg(test)]
 pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
     let config = crate::utils::read_config().unwrap();
+    let migrations_path = "./migrations";
     let node = config["indexer"]["configuration"]["full_node"]
         .as_str()
         .unwrap();
@@ -368,7 +373,7 @@ pub async fn create_test_db_or_first_pull(is_tmp: bool) -> Result<SqlitePool> {
         db_path.to_string()
     };
     let pool_size = 16u32;
-    let pool = initialize_db_pool(&db_path, pool_size).await?;
+    let pool = initialize_db_pool(migrations_path, &db_path, pool_size).await?;
 
     // if the db is empty, pull utxos.
     if !has_shard(&pool, 0, 0).await {
@@ -502,6 +507,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_one_shard_should_work() {
+        let migrations_path = "./migrations";
         let tmp_db = tempfile::Builder::new()
             .prefix("tmp-utxo")
             .suffix(&".db")
@@ -509,7 +515,7 @@ mod tests {
             .unwrap();
         let db_url = tmp_db.path().to_str().unwrap();
 
-        let pool = initialize_db_pool(db_url, 16).await;
+        let pool = initialize_db_pool(migrations_path, db_url, 16).await;
         assert!(pool.is_ok());
 
         let mut pool = pool.unwrap();
@@ -570,13 +576,14 @@ mod tests {
 
     #[tokio::test]
     async fn insert_nullifier_should_work() {
+        let migrations_path = "./migrations";
         let tmp_db = tempfile::Builder::new()
             .prefix("tmp-utxo")
             .suffix(&".db")
             .tempfile()
             .unwrap();
         let db_url = tmp_db.path().to_str().unwrap();
-        let pool = initialize_db_pool(db_url, 16).await;
+        let pool = initialize_db_pool(migrations_path, db_url, 16).await;
         assert!(pool.is_ok());
         let pool = pool.unwrap();
 
@@ -617,6 +624,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_and_update_total_senders_receivers_should_work() {
+        let migrations_path = "./migrations";
         let tmp_db = tempfile::Builder::new()
             .prefix("tmp-utxo")
             .suffix(&".db")
@@ -624,7 +632,7 @@ mod tests {
             .unwrap();
         let db_url = tmp_db.path().to_str().unwrap();
 
-        let pool = initialize_db_pool(db_url, 16).await;
+        let pool = initialize_db_pool(migrations_path, db_url, 16).await;
         assert!(pool.is_ok());
         let pool = pool.unwrap();
 
