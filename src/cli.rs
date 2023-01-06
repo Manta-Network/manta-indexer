@@ -21,11 +21,11 @@ use clap::{Parser, Subcommand};
 pub struct IndexerCli {
     /// The path points to the file for setup logging and configuration for indexer.
     /// This path should contains files with a hardcoded name like config.toml and log.yaml
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t=String::from("./conf"))]
     pub config_path: String,
 
     /// The path points to the sql migrations with a hardcoded name like 0_schema.sql
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t=String::from("./migrations"))]
     pub migrations_path: String,
 
     #[command(subcommand)]

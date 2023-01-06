@@ -48,7 +48,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           cargo build --release
-          pm2 start --name manta-indexer ${{ github.workspace }}/target/release/manta-indexer --config-path ./conf --migrations-path ./migrations
+          pm2 start --name manta-indexer ${{ github.workspace }}/target/release/manta-indexer
       - name: Check Block Production
         run: |
           cd ${{ github.workspace }}/tests/integration-tests
