@@ -11,7 +11,7 @@ Please take a look at [indexer design](./indexer-design.md) if you're interested
 ## Perquisites
 - rustc >= 1.58
 - Sqlite >= 3.0
-- yarn, nodejs > 16.0
+- yarn, nodejs >= 16.0
 
 ## Deployment
 
