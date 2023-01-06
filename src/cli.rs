@@ -14,13 +14,27 @@
 // You should have received a copy of the GNU General Public License
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
-/// The storage name: MantaPay
-pub const MANTA_PAY_KEY_PREFIX: [u8; 8] = *b"MantaPay";
-/// The storage name: Shards
-pub const MANTA_PAY_STORAGE_SHARDS_NAME: [u8; 6] = *b"Shards";
-/// The storage name: NullifierSetInsertionOrder
-pub const MANTA_PAY_STORAGE_NULLIFIER_NAME: [u8; 26] = *b"NullifierSetInsertionOrder";
+use clap::{Parser, Subcommand};
 
-pub const MEGABYTE: u32 = 1024 * 1024;
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct IndexerCli {
+    /// The path points to the file for setup logging and configuration for indexer.
+    /// This path should contains files with a hardcoded name like config.toml and log.yaml
+    #[arg(short, long)]
+    pub config_path: String,
 
-pub const PULL_LEDGER_DIFF_METHODS: &str = "mantaPay_pull_ledger_diff";
+    /// The path points to the sql migrations with a hardcoded name like 0_schema.sql
+    #[arg(short, long)]
+    pub migrations_path: String,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+// todo
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    PullUtxo,
+    InsertUtxo,
+}

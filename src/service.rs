@@ -1,4 +1,4 @@
-// Copyright 2020-2022 Manta Network.
+// Copyright 2020-2023 Manta Network.
 // This file is part of Manta.
 //
 // Manta is free software: you can redistribute it and/or modify
@@ -35,7 +35,10 @@ use tokio::sync::mpsc::Sender;
 const FULL_NODE_BLOCK_GEN_INTERVAL_SEC: u8 = 12;
 static RPC_METHODS: OnceStatic<RpcMethods> = OnceStatic::new("RPC_METHODS");
 
-pub async fn start_service(graceful_register: Sender<()>) -> Result<WsServerHandle> {
+pub async fn start_service(
+    graceful_register: Sender<()>,
+    migrations_path: &str,
+) -> Result<WsServerHandle> {
     let mut module = jsonrpsee::RpcModule::<()>::new(());
 
     let config = crate::utils::read_config()?;
@@ -52,7 +55,7 @@ pub async fn start_service(graceful_register: Sender<()>) -> Result<WsServerHand
         .as_str()
         .ok_or(crate::errors::IndexerError::WrongConfig)?;
 
-    let db_pool = crate::db::initialize_db_pool(db_path, pool_size).await?;
+    let db_pool = crate::db::initialize_db_pool(migrations_path, db_path, pool_size).await?;
 
     // create indexer rpc handler
     let indexer_rpc = MantaPayIndexerServer::new(db_pool.clone());
