@@ -68,7 +68,7 @@ pub async fn reconstruct_shards_from_pull_response(
         HashMap::<u8, Vec<(Utxo, FullIncomingNote)>>::with_capacity(pull_response.receivers.len());
     let mut stream_receivers = tokio_stream::iter(pull_response.receivers.iter());
     let utxo_accumulator_item_hash = UtxoAccumulatorItemHash::decode(
-        manta_parameters::pay::testnet::parameters::UtxoAccumulatorItemHash::get()
+        manta_parameters::pay::parameters::UtxoAccumulatorItemHash::get()
             .expect("Checksum did not match."),
     )
     .expect("Unable to decode the Merkle Tree Item Hash.");

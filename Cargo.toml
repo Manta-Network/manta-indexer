@@ -25,10 +25,10 @@ sp-version = { git = "https://github.com/paritytech/substrate.git", branch = "po
 log4rs = "1.2"
 
 # manta deps
-manta-crypto = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.8" }
-manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.8", features = ["groth16", "scale", "serde"] }
-manta-util = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.8" }
-pallet-manta-pay = { git = "https://github.com/manta-network/Manta.git", branch = "manta", features = ["rpc", "runtime"] }
+manta-crypto = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.9" }
+manta-pay = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.9", features = ["groth16", "scale", "serde"] }
+manta-util = { git = "https://github.com/manta-network/manta-rs.git", tag = "v0.5.9" }
+pallet-manta-pay = { git = "https://github.com/manta-network/Manta.git", branch = "fix/errors-v2", features = ["rpc", "runtime"] }
 
 # general crates
 clap = { version = "4.0.32", features =["derive"] }
