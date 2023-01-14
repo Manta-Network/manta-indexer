@@ -2831,7 +2831,7 @@ dependencies = [
 [[package]]
 name = "manta-primitives"
 version = "4.0.0-rc1"
-source = "git+https://github.com/manta-network/Manta.git?branch=fix/errors-v2#b2ac77d419e5426668f4ea33423f99ad0c7c4301"
+source = "git+https://github.com/manta-network/Manta.git?branch=manta#56f8cb3841844a7fe7debc54309b274bf86edd0a"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -3167,7 +3167,7 @@ checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 [[package]]
 name = "pallet-manta-pay"
 version = "0.4.0"
-source = "git+https://github.com/manta-network/Manta.git?branch=fix/errors-v2#b2ac77d419e5426668f4ea33423f99ad0c7c4301"
+source = "git+https://github.com/manta-network/Manta.git?branch=manta#56f8cb3841844a7fe7debc54309b274bf86edd0a"
 dependencies = [
  "anyhow",
  "base64 0.20.0",
