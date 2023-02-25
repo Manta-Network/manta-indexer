@@ -406,8 +406,8 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index = 206u8;
-        let utxo_index = 1;
+        let shard_index = 0u8;
+        let utxo_index = 0;
         let one_shard = get_one_shard(&pool, shard_index, utxo_index).await;
 
         assert!(one_shard.is_ok());
@@ -421,8 +421,8 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index = 206u8;
-        let utxo_index = 1;
+        let shard_index = 0u8;
+        let utxo_index = 0;
         assert!(has_shard(&pool, shard_index, utxo_index).await);
 
         let invalid_utxo_index = u64::MAX;
@@ -438,7 +438,7 @@ mod tests {
 
         let pool = pool.unwrap();
 
-        let shard_index = 206u8;
+        let shard_index = 0u8;
         let utxo_index_between = Uniform::from(0..2);
         let mut rng = rand::thread_rng();
         let mut from_utxo_index = utxo_index_between.sample(&mut rng);

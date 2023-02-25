@@ -567,7 +567,15 @@ mod tests {
                     let _shard = dolphin_runtime::storage()
                         .manta_pay()
                         .shards(shard_index as u8, i as u64);
-                    let shard = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+                    let shard = api
+                        .storage()
+                        .at(None)
+                        .await
+                        .unwrap()
+                        .fetch(&_shard)
+                        .await
+                        .unwrap()
+                        .unwrap();
                     let (utxo, note) = shard;
                     assert_ne!(utxo.encode(), Utxo::default().encode());
                     assert_ne!(note.encode(), FullIncomingNote::default().encode());
@@ -632,11 +640,11 @@ mod tests {
             .expect("Failed to create client.");
 
         let shard_idxs = [
-            (206u8, 0u64),
-            (206u8, 1u64),
-            (173u8, 0u64),
-            (222u8, 1u64),
-            (89u8, 0u64),
+            (31u8, 0u64),
+            (123u8, 0u64),
+            (60u8, 1u64),
+            (167u8, 2u64),
+            (136u8, 1u64),
         ];
 
         // check shards randomly for 5 times
@@ -646,7 +654,15 @@ mod tests {
             let _shard = dolphin_runtime::storage()
                 .manta_pay()
                 .shards(shard_index as u8, utxo_index as u64);
-            let shard = api.storage().fetch(&_shard, None).await.unwrap().unwrap();
+            let shard = api
+                .storage()
+                .at(None)
+                .await
+                .unwrap()
+                .fetch(&_shard)
+                .await
+                .unwrap()
+                .unwrap();
             let (onchain_utxo, onchain_note) = shard;
             let reconstructed_utxo =
                 &shards.get(&shard_index).as_ref().unwrap()[utxo_index as usize];
