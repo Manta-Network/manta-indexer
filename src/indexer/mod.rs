@@ -79,7 +79,7 @@ impl MantaPayIndexerApiServer for MantaPayIndexerServer {
             .pull_ledger_diff_impl(checkpoint, max_receivers, max_senders)
             .await?;
         Ok(DensePullResponse {
-            sender_receivers_total: raw.senders_receivers_total,
+            senders_receivers_total: raw.senders_receivers_total,
             receivers: base64::encode(raw.receivers.encode()),
             senders: base64::encode(raw.senders.encode()),
             should_continue: raw.should_continue,

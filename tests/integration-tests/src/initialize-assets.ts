@@ -12,13 +12,14 @@ async function main() {
 
   const amount = 100000;
   const decimal = indexerApi.registry.chainDecimals;
-  const toMint = new BN(amount).mul(new BN(decimal));
+  const factor = new BN(10).pow(new BN(decimal));
+  const toMint = new BN(amount).mul(factor);
 
   let createAssetsCalls = [];
   let mintAssetsCalls = [];
   const symbols = ["KMA", "MANTA", "DOL"];
-  const assetIds = [8, 9, 10];
-  for (let i = 0; i < 3; i++) {
+  const assetIds = [8, 9, 10, 11, 12, 13];
+  for (let i = 0; i < assetIds.length; i++) {
     const assetLocaltion = {
       V1: {
         parent: 1,

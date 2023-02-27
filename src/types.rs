@@ -17,8 +17,8 @@
 use serde::{Deserialize, Serialize};
 
 pub use pallet_manta_pay::types::{
-    Checkpoint, FullIncomingNote, NullifierCommitment, OutgoingNote, PullResponse, ReceiverChunk,
-    SenderChunk, Utxo,
+    Checkpoint, DensePullResponse, FullIncomingNote, NullifierCommitment, OutgoingNote,
+    PullResponse, ReceiverChunk, SenderChunk, Utxo,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -56,35 +56,44 @@ pub struct Nullifier {
     pub outgoing_note: Vec<u8>,
 }
 
-/// `DensePullResponse` is the dense design of raw `PullResponse`.
-/// The reason for creating it is that raw `PullResponse` always carries a bunch of sender
-/// and receiver chunks, which is quite not friendly for json serde and de-serde.
-/// So with raw format, serialization will generates a large bottleneck.
-/// So we will use `DensePullResponse` as transmission protocol.
-///
-/// Note:
-/// Most of the time(90%+) is spent writing into json strings,
-/// so the key design here is to improve the compression ratio of the chunks string ASAP.
-/// If you want to improve, you can try more effective compression algorithm like `zstd`.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct DensePullResponse {
-    /// Same with raw `PullResponse`
-    pub should_continue: bool,
-    /// Compression of dense `ReceiverChunk`
-    pub receivers: String,
-    /// Compression of dense `SenderChunk`
-    pub senders: String,
-    /// Same with raw `PullResponse`
-    pub sender_receivers_total: [u8; 16],
+#[deprecated(
+    since = "4.0.0",
+    note = "Just keep this type for why we created dense PullResponse"
+)]
+pub fn foo() {}
+mod deprecated {
+    use super::*;
 
-    /// Next request checkpoint calculated from server.
-    /// If should_continue = false, this data makes no sense.
-    /// Else, the client can just use this one as next request cursor,
-    /// It avoids complex computing on the client side,
-    /// and the potential risk of inconsistent computing rules between the client and server.
+    /// `DensePullResponse` is the dense design of raw `PullResponse`.
+    /// The reason for creating it is that raw `PullResponse` always carries a bunch of sender
+    /// and receiver chunks, which is quite not friendly for json serde and de-serde.
+    /// So with raw format, serialization will generates a large bottleneck.
+    /// So we will use `DensePullResponse` as transmission protocol.
     ///
-    /// The reason this field is a option instead of a straight struct is that we
-    /// want to keep api same with runtime, and runtime can't support next_checkpoint so easy.
-    /// So, for indexer, this field return some, for full node, this field return none.
-    pub next_checkpoint: Option<Checkpoint>,
+    /// Note:
+    /// Most of the time(90%+) is spent writing into json strings,
+    /// so the key design here is to improve the compression ratio of the chunks string ASAP.
+    /// If you want to improve, you can try more effective compression algorithm like `zstd`.
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct DensePullResponse {
+        /// Same with raw `PullResponse`
+        pub should_continue: bool,
+        /// Compression of dense `ReceiverChunk`
+        pub receivers: String,
+        /// Compression of dense `SenderChunk`
+        pub senders: String,
+        /// Same with raw `PullResponse`
+        pub senders_receivers_total: [u8; 16],
+
+        /// Next request checkpoint calculated from server.
+        /// If should_continue = false, this data makes no sense.
+        /// Else, the client can just use this one as next request cursor,
+        /// It avoids complex computing on the client side,
+        /// and the potential risk of inconsistent computing rules between the client and server.
+        ///
+        /// The reason this field is a option instead of a straight struct is that we
+        /// want to keep api same with runtime, and runtime can't support next_checkpoint so easy.
+        /// So, for indexer, this field return some, for full node, this field return none.
+        pub next_checkpoint: Option<Checkpoint>,
+    }
 }
